@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import { motion } from "framer-motion";
 import { Upload, Mic, MicOff, Type, Send, X } from "lucide-react";
 import clsx from "clsx";
 
@@ -24,25 +25,22 @@ export function IntakePanel({ onSubmit, isLoading }: IntakePanelProps) {
 
   const handleFileSelect = (file: File) => {
     setImage(file);
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
     const url = URL.createObjectURL(file);
     setImagePreview(url);
   };
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith("image/")) {
-      handleFileSelect(file);
-    }
-  }, []);
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = () => setIsDragging(false);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith("image/")) {
+        handleFileSelect(file);
+      }
+    },
+    [imagePreview],
+  );
 
   const startRecording = () => {
     const SpeechRecognitionAPI =
@@ -73,89 +71,84 @@ export function IntakePanel({ onSubmit, isLoading }: IntakePanelProps) {
   };
 
   const clearImage = () => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
     setImage(null);
     setImagePreview(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleSubmit = () => {
-    onSubmit(
-      image ?? undefined,
-      voiceText || undefined,
-      manualText || undefined,
-    );
+    onSubmit(image ?? undefined, voiceText || undefined, manualText || undefined);
   };
 
   const hasInput = !!image || !!voiceText || !!manualText;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white mb-1">Intake Processing</h1>
-        <p className="text-gray-400 text-sm">
-          Upload a form photo, record a voice note, or type notes. Gemma 4 handles the rest.
+    <motion.section
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="glass-panel mx-auto max-w-3xl rounded-2xl p-5 sm:p-6"
+    >
+      <div className="mb-5">
+        <p className="text-xs uppercase tracking-[0.2em] text-cyan-200/75">Mission intake</p>
+        <h1 className="mt-1 text-2xl font-semibold text-white">Humanitarian case capture</h1>
+        <p className="mt-2 text-sm text-slate-300/80">
+          Upload field evidence, transcribe voice notes, or write direct context. Gemma 4 converts it into coordinated action.
         </p>
       </div>
 
-      {/* Mode tabs */}
-      <div className="flex gap-1 bg-white/[0.04] rounded-lg p-1">
+      <div className="mb-4 flex gap-1 rounded-xl border border-white/10 bg-black/25 p-1">
         {(["image", "voice", "text"] as InputMode[]).map((m) => (
           <button
             key={m}
             onClick={() => setMode(m)}
             className={clsx(
-              "flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all capitalize flex items-center justify-center gap-2",
+              "flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium capitalize transition-all",
               mode === m
-                ? "bg-blue-600 text-white"
-                : "text-gray-400 hover:text-gray-200",
+                ? "bg-gradient-to-r from-blue-500/80 to-cyan-500/75 text-white"
+                : "text-slate-300/70 hover:text-slate-100",
             )}
           >
-            {m === "image" && <Upload className="w-4 h-4" />}
-            {m === "voice" && <Mic className="w-4 h-4" />}
-            {m === "text" && <Type className="w-4 h-4" />}
+            {m === "image" && <Upload className="h-4 w-4" />}
+            {m === "voice" && <Mic className="h-4 w-4" />}
+            {m === "text" && <Type className="h-4 w-4" />}
             {m}
           </button>
         ))}
       </div>
 
-      {/* Image dropzone */}
       {mode === "image" && (
         <div>
           {imagePreview ? (
-            <div className="relative rounded-xl overflow-hidden border border-white/10">
+            <div className="relative overflow-hidden rounded-xl border border-white/15">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={imagePreview}
-                alt="Form preview"
-                className="w-full max-h-64 object-contain bg-black/40"
-              />
+              <img src={imagePreview} alt="Form preview" className="max-h-72 w-full object-contain bg-black/55" />
               <button
                 onClick={clearImage}
-                className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 p-1.5 rounded-full transition-colors"
+                className="absolute right-2 top-2 rounded-full border border-white/20 bg-black/55 p-1.5 text-white transition hover:bg-black/80"
               >
-                <X className="w-4 h-4 text-white" />
+                <X className="h-4 w-4" />
               </button>
             </div>
           ) : (
             <div
               onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
               onClick={() => fileInputRef.current?.click()}
               className={clsx(
-                "border-2 border-dashed rounded-xl p-12 flex flex-col items-center gap-3 cursor-pointer transition-all",
+                "cursor-pointer rounded-xl border-2 border-dashed px-6 py-14 text-center transition-all",
                 isDragging
-                  ? "border-blue-400 bg-blue-500/10"
-                  : "border-white/10 hover:border-white/20 bg-white/[0.02] hover:bg-white/[0.04]",
+                  ? "border-cyan-300 bg-cyan-400/10"
+                  : "border-white/15 bg-white/[0.02] hover:border-cyan-200/45 hover:bg-cyan-400/5",
               )}
             >
-              <Upload className="w-10 h-10 text-gray-500" />
-              <div className="text-center">
-                <p className="text-gray-300 font-medium">Drop a form photo here</p>
-                <p className="text-gray-500 text-sm mt-1">
-                  or click to browse · PNG, JPG, WEBP
-                </p>
-              </div>
+              <Upload className="mx-auto h-10 w-10 text-cyan-100/70" />
+              <p className="mt-3 text-sm font-medium text-slate-100">Drop a handwritten intake form</p>
+              <p className="mt-1 text-xs text-slate-400">PNG, JPG, WEBP · click to browse</p>
             </div>
           )}
           <input
@@ -171,72 +164,65 @@ export function IntakePanel({ onSubmit, isLoading }: IntakePanelProps) {
         </div>
       )}
 
-      {/* Voice input */}
       {mode === "voice" && (
         <div className="space-y-3">
           <div className="flex justify-center">
             <button
               onClick={isRecording ? stopRecording : startRecording}
               className={clsx(
-                "w-20 h-20 rounded-full flex items-center justify-center transition-all",
+                "flex h-20 w-20 items-center justify-center rounded-full border-2 transition",
                 isRecording
-                  ? "bg-red-500/20 border-2 border-red-500 text-red-400 animate-pulse"
-                  : "bg-blue-500/20 border-2 border-blue-500 text-blue-400 hover:bg-blue-500/30",
+                  ? "border-rose-300/70 bg-rose-400/20 text-rose-200 pulse-halo"
+                  : "border-cyan-200/60 bg-cyan-400/15 text-cyan-100 hover:bg-cyan-300/20",
               )}
             >
-              {isRecording ? (
-                <MicOff className="w-8 h-8" />
-              ) : (
-                <Mic className="w-8 h-8" />
-              )}
+              {isRecording ? <MicOff className="h-8 w-8" /> : <Mic className="h-8 w-8" />}
             </button>
           </div>
-          <p className="text-center text-sm text-gray-500">
-            {isRecording ? "Recording… click to stop" : "Click to start recording"}
+          <p className="text-center text-sm text-slate-400">
+            {isRecording ? "Recording humanitarian voice note..." : "Tap to begin live transcript"}
           </p>
           {voiceText && (
-            <div className="bg-white/[0.03] border border-white/10 rounded-lg p-4">
-              <p className="text-xs text-gray-500 mb-2 uppercase tracking-widest">Transcript</p>
-              <p className="text-gray-300 text-sm leading-relaxed">{voiceText}</p>
+            <div className="rounded-lg border border-white/12 bg-black/20 p-4">
+              <p className="mb-2 text-xs uppercase tracking-[0.16em] text-cyan-200/70">Transcript</p>
+              <p className="text-sm leading-relaxed text-slate-200">{voiceText}</p>
             </div>
           )}
         </div>
       )}
 
-      {/* Text input */}
       {mode === "text" && (
         <textarea
           value={manualText}
           onChange={(e) => setManualText(e.target.value)}
-          placeholder="Type intake notes here — name, age, location, injuries, needs…"
+          placeholder="Type field summary, vulnerabilities, and immediate needs..."
           rows={8}
-          className="w-full bg-white/[0.03] border border-white/10 rounded-xl p-4 text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50 resize-none text-sm leading-relaxed"
+          className="w-full resize-none rounded-xl border border-white/15 bg-black/20 p-4 text-sm leading-relaxed text-slate-100 placeholder:text-slate-500 focus:border-cyan-200/60 focus:outline-none"
         />
       )}
 
-      {/* Submit */}
       <button
         onClick={handleSubmit}
         disabled={isLoading || !hasInput}
         className={clsx(
-          "w-full py-3 px-6 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all",
+          "mt-5 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition",
           isLoading || !hasInput
-            ? "bg-white/5 text-gray-600 cursor-not-allowed"
-            : "bg-blue-600 hover:bg-blue-500 text-white active:scale-[0.98]",
+            ? "cursor-not-allowed bg-white/5 text-slate-500"
+            : "bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:brightness-110",
         )}
       >
         {isLoading ? (
           <>
-            <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-            Processing…
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+            Processing operation...
           </>
         ) : (
           <>
-            <Send className="w-4 h-4" />
-            Process Intake
+            <Send className="h-4 w-4" />
+            Launch triage pipeline
           </>
         )}
       </button>
-    </div>
+    </motion.section>
   );
 }

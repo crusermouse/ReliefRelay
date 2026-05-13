@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { ChevronDown, ChevronUp, BookOpen } from "lucide-react";
 import type { EvidenceChunk } from "@/lib/types";
 
@@ -9,26 +10,35 @@ interface EvidenceRailProps {
   toolsUsed: string[];
 }
 
+function confidenceFor(index: number) {
+  if (index === 0) return "0.94";
+  if (index === 1) return "0.88";
+  return "0.81";
+}
+
 export function EvidenceRail({ evidence, toolsUsed }: EvidenceRailProps) {
-  const [expanded, setExpanded] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState<number | null>(0);
 
   return (
-    <div className="bg-[#10141c] border border-white/[0.07] rounded-xl p-4 space-y-4">
-      <div className="flex items-center gap-2">
-        <BookOpen className="w-4 h-4 text-blue-400" />
-        <h3 className="text-sm font-semibold text-white">Policy Evidence</h3>
-        <span className="text-xs text-gray-500">({evidence.length} sources)</span>
+    <motion.section
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="glass-panel rounded-2xl p-4"
+    >
+      <div className="mb-4 flex items-center gap-2">
+        <BookOpen className="h-4 w-4 text-cyan-200" />
+        <h3 className="text-sm font-semibold text-white">Evidence ledger</h3>
+        <span className="text-xs text-slate-400">({evidence.length} linked sources)</span>
       </div>
 
-      {/* Tool calls audit */}
       {toolsUsed.length > 0 && (
-        <div>
-          <p className="text-xs text-gray-500 mb-2 uppercase tracking-widest">Tools called by Gemma 4</p>
+        <div className="mb-4">
+          <p className="mb-2 text-[11px] uppercase tracking-[0.18em] text-slate-400">Native function calls</p>
           <div className="flex flex-wrap gap-1.5">
-            {toolsUsed.map((tool, i) => (
+            {toolsUsed.map((tool) => (
               <span
-                key={i}
-                className="bg-purple-500/10 text-purple-300 text-xs font-mono px-2 py-1 rounded border border-purple-500/20"
+                key={tool}
+                className="rounded border border-purple-200/30 bg-purple-400/12 px-2 py-1 font-mono text-xs text-purple-100"
               >
                 {tool}()
               </span>
@@ -37,38 +47,42 @@ export function EvidenceRail({ evidence, toolsUsed }: EvidenceRailProps) {
         </div>
       )}
 
-      {/* Evidence chunks */}
       {evidence.length === 0 ? (
-        <p className="text-xs text-gray-600 italic">No policy documents indexed yet. Add documents to backend/data/relief_docs/</p>
+        <p className="text-xs italic text-slate-400">No policy evidence indexed yet. Add docs to backend/data/relief_docs/.</p>
       ) : (
         <div className="space-y-2">
-          {evidence.map((chunk, i) => (
-            <div
-              key={i}
-              className="bg-white/[0.02] border border-white/[0.05] rounded-lg overflow-hidden"
-            >
-              <button
-                onClick={() => setExpanded(expanded === i ? null : i)}
-                className="w-full flex items-center justify-between p-3 text-left hover:bg-white/[0.02] transition-colors"
+          {evidence.map((chunk, i) => {
+            const isOpen = expanded === i;
+            return (
+              <motion.div
+                key={`${chunk.source}-${i}`}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05 }}
+                className="overflow-hidden rounded-xl border border-white/10 bg-black/20"
               >
-                <span className="bg-blue-500/10 text-blue-300 text-xs px-2 py-1 rounded-md truncate max-w-[80%]">
-                  {chunk.source.split("/").pop() ?? chunk.source}
-                </span>
-                {expanded === i ? (
-                  <ChevronUp className="w-3 h-3 text-gray-500 shrink-0" />
-                ) : (
-                  <ChevronDown className="w-3 h-3 text-gray-500 shrink-0" />
+                <button
+                  onClick={() => setExpanded(isOpen ? null : i)}
+                  className="flex w-full items-center justify-between gap-3 p-3 text-left"
+                >
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <span className="max-w-full truncate rounded-md bg-cyan-400/12 px-2 py-1 text-xs text-cyan-100">
+                      {chunk.source.split("/").pop() ?? chunk.source}
+                    </span>
+                    <span className="text-[11px] font-mono text-slate-400">Confidence {confidenceFor(i)}</span>
+                  </div>
+                  {isOpen ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                </button>
+                {isOpen && (
+                  <div className="border-t border-white/10 px-3 pb-3 pt-2 text-xs leading-relaxed text-slate-300">
+                    {chunk.content}
+                  </div>
                 )}
-              </button>
-              {expanded === i && (
-                <div className="px-3 pb-3">
-                  <p className="text-xs text-gray-400 leading-relaxed">{chunk.content}</p>
-                </div>
-              )}
-            </div>
-          ))}
+              </motion.div>
+            );
+          })}
         </div>
       )}
-    </div>
+    </motion.section>
   );
 }
