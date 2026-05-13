@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import { CheckCircle2, LoaderCircle } from "lucide-react";
@@ -36,6 +37,14 @@ function streamedLabel(label: string, progress: number) {
 
 export function LiveReasoningTimeline({ loadingStep, isLoading }: LiveReasoningTimelineProps) {
   const current = STEP_INDEX[loadingStep];
+  const [streamProgress, setStreamProgress] = useState(0.65);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setStreamProgress((prev) => (prev >= 1 ? 0.65 : Number((prev + 0.05).toFixed(2))));
+    }, 120);
+    return () => window.clearInterval(timer);
+  }, []);
 
   return (
     <section className="glass-panel terminal-grid rounded-2xl p-4 md:p-5">
@@ -75,7 +84,7 @@ export function LiveReasoningTimeline({ loadingStep, isLoading }: LiveReasoningT
                 {done ? <CheckCircle2 className="w-4 h-4" /> : <LoaderCircle className={clsx("w-4 h-4", active && "animate-spin")} />}
               </span>
               <span className={clsx("text-xs md:text-sm font-mono", done ? "text-emerald-200" : active ? "text-cyan-100 text-glow" : "text-gray-400")}>
-                {active ? streamedLabel(step.label, 0.65 + ((Date.now() / 700) % 0.35)) : step.label}
+                {active ? streamedLabel(step.label, streamProgress) : step.label}
               </span>
             </motion.div>
           );

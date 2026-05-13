@@ -33,7 +33,10 @@ export function CaseActivityFeed({ latestCaseId }: CaseActivityFeedProps) {
 
   useEffect(() => {
     if (!latestCaseId) return;
-    setItems((prev) => [{ id: latestCaseId, text: `Case ${latestCaseId} updated`, time: nowTime() }, ...prev].slice(0, 8));
+    const timer = window.setTimeout(() => {
+      setItems((prev) => [{ id: latestCaseId, text: `Case ${latestCaseId} updated`, time: nowTime() }, ...prev].slice(0, 8));
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [latestCaseId]);
 
   useEffect(() => {
