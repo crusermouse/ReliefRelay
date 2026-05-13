@@ -62,13 +62,18 @@ def extract_from_image(image_path: str) -> IntakeRecord:
         data = json.loads(text)
         return IntakeRecord(**data)
     except Exception as e:
-        # Fallback: ask Gemma to correct its own output
+        # Fallback: ask Gemma to correct its own output (one retry only)
         fix_prompt = (
             f"Fix this invalid JSON to match the IntakeRecord schema:\n{raw}\n"
             f"Error: {e}\nReturn ONLY valid JSON."
         )
         fixed = chat_text(fix_prompt, json_mode=True)
-        return IntakeRecord(**json.loads(fixed))
+        try:
+            return IntakeRecord(**json.loads(fixed))
+        except Exception as fallback_err:
+            raise ValueError(
+                f"Failed to extract intake record after retry: {fallback_err}"
+            ) from fallback_err
 
 
 def extract_from_voice(transcription: str) -> IntakeRecord:

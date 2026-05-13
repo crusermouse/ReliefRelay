@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from datetime import datetime
 from reportlab.lib.pagesizes import A4
@@ -11,6 +12,16 @@ from tools.case_manager import get_case
 OUTPUT_DIR = Path("/tmp/reliefRelay_pdfs")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+# Allowed case ID format: CASE- followed by 6 uppercase hex characters
+_CASE_ID_RE = re.compile(r"^CASE-[0-9A-F]{6}$")
+
+
+def _validate_case_id(case_id: str) -> str:
+    """Validate that case_id matches the expected safe pattern."""
+    if not _CASE_ID_RE.match(case_id):
+        raise ValueError(f"Invalid case_id format: {case_id!r}")
+    return case_id
+
 TRIAGE_COLORS = {
     "RED": colors.HexColor("#ef4444"),
     "ORANGE": colors.HexColor("#f97316"),
@@ -21,6 +32,7 @@ TRIAGE_COLORS = {
 
 def generate_pdf(case_id: str) -> str:
     """Generate a printable referral PDF for the given case_id."""
+    case_id = _validate_case_id(case_id)
     case = get_case(case_id)
     if not case:
         raise ValueError(f"Case {case_id} not found")

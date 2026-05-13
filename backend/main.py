@@ -1,16 +1,29 @@
+import re
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-import aiofiles, shutil, uuid
+import aiofiles, uuid
 from pathlib import Path
 from ai.extractor import extract_from_image, extract_from_voice, extract_from_text
-from ai.rag import load_index, retrieve, generate_grounded_plan
+from ai.rag import load_index, retrieve
 from ai.agent import run_intake_agent
-from ai.gemma import chat_text
 from tools.pdf_export import generate_pdf
 from tools.case_manager import list_cases, get_case
 
-app = FastAPI(title="ReliefRelay API", version="1.0.0")
+# Load RAG index at startup (persisted — loads in seconds)
+vector_store = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global vector_store
+    vector_store = load_index()
+    print("✓ ReliefRelay API ready")
+    yield
+
+
+app = FastAPI(title="ReliefRelay API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -18,16 +31,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Load RAG index at startup (persisted — loads in seconds)
-vector_store = None
-
-
-@app.on_event("startup")
-async def startup():
-    global vector_store
-    vector_store = load_index()
-    print("✓ ReliefRelay API ready")
 
 
 # ── MAIN INTAKE ENDPOINT ───────────────────────────────────────────────
@@ -91,6 +94,9 @@ async def process_intake(
     }
 
 
+_CASE_ID_RE = re.compile(r"^CASE-[0-9A-F]{6}$")
+
+
 # ── CASES ──────────────────────────────────────────────────────────────
 @app.get("/cases")
 async def get_cases(limit: int = 50):
@@ -111,6 +117,8 @@ async def get_case_by_id(case_id: str):
 # ── EXPORT ────────────────────────────────────────────────────────────
 @app.get("/export/{case_id}/pdf")
 async def export_case_pdf(case_id: str):
+    if not _CASE_ID_RE.match(case_id):
+        raise HTTPException(400, "Invalid case_id format")
     case = get_case(case_id)
     if not case:
         raise HTTPException(404, f"Case {case_id} not found")
