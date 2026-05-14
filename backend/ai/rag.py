@@ -6,13 +6,13 @@ from pathlib import Path
 from config import settings
 
 
-# ── EMBEDDING SETUP ────────────────────────────────────────────────────
+# -- EMBEDDING SETUP ----------------------------------------------------
 def get_embeddings():
     """Local embeddings via Ollama — no internet required."""
     return OllamaEmbeddings(model=settings.EMBED_MODEL)
 
 
-# ── INDEX CORPUS ───────────────────────────────────────────────────────
+# -- INDEX CORPUS -------------------------------------------------------
 def build_index() -> Chroma:
     """
     Load all PDFs and TXT files from the docs directory,
@@ -35,7 +35,7 @@ def build_index() -> Chroma:
         all_docs.extend(loader.load())
 
     if not all_docs:
-        print("⚠ No documents found in docs directory. Index will be empty.")
+        print("! No documents found in docs directory. Index will be empty.")
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=500,   # 500 tokens per chunk — good for policy docs
@@ -51,7 +51,7 @@ def build_index() -> Chroma:
         embedding=get_embeddings(),
         persist_directory=settings.CHROMA_PERSIST_DIR,
     )
-    print(f"✓ Indexed {len(chunks)} chunks from {len(all_docs)} documents")
+    print(f"[SUCCESS] Indexed {len(chunks)} chunks from {len(all_docs)} documents")
     return vector_store
 
 
@@ -59,7 +59,7 @@ def load_index() -> Chroma:
     """Load a previously built ChromaDB index. Instant on subsequent runs."""
     persist_dir = Path(settings.CHROMA_PERSIST_DIR)
     if not persist_dir.exists() or not any(persist_dir.iterdir()):
-        print("⚠ No existing index found. Building index now...")
+        print("! No existing index found. Building index now...")
         return build_index()
 
     return Chroma(
@@ -68,7 +68,7 @@ def load_index() -> Chroma:
     )
 
 
-# ── RETRIEVAL ──────────────────────────────────────────────────────────
+# -- RETRIEVAL ----------------------------------------------------------
 def retrieve(
     query: str,
     vector_store: Chroma | None,
@@ -91,7 +91,7 @@ def retrieve(
         return []
 
 
-# ── GROUNDED GENERATION ────────────────────────────────────────────────
+# -- GROUNDED GENERATION ------------------------------------------------
 def generate_grounded_plan(
     intake_record: dict,
     retrieved_docs: list[dict],

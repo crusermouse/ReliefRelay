@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const FEED_EVENTS = [
@@ -16,10 +16,19 @@ interface CaseActivityFeedProps {
 }
 
 function nowTime() {
-  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const d = new Date();
+  const h = d.getHours();
+  const m = d.getMinutes();
+  const ampm = h >= 12 ? "PM" : "AM";
+  const displayH = h % 12 || 12;
+  const displayM = m < 10 ? `0${m}` : m;
+  return `${displayH}:${displayM} ${ampm}`;
 }
 
 export function CaseActivityFeed({ latestCaseId }: CaseActivityFeedProps) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const seed = useMemo(
     () =>
       FEED_EVENTS.slice(0, 3).map((text, i) => ({
@@ -55,7 +64,9 @@ export function CaseActivityFeed({ latestCaseId }: CaseActivityFeedProps) {
               className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2"
             >
               <p className="text-xs text-gray-200">{item.text}</p>
-              <p className="text-[10px] text-gray-500 mt-1 font-mono">{item.time}</p>
+              <p className="text-[10px] text-gray-500 mt-1 font-mono">
+                {mounted ? item.time : "--:-- --"}
+              </p>
             </motion.div>
           ))}
         </AnimatePresence>

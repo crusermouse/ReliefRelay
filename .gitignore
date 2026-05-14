@@ -1,0 +1,30 @@
+# Python
+backend/.venv/
+backend/__pycache__/
+backend/ai/__pycache__/
+backend/tools/__pycache__/
+backend/api/__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Secrets — never commit
+backend/.env
+
+# Generated / large data
+backend/data/chroma_db/
+backend/data/cases.db
+
+# Node
+relief-relay-ui/node_modules/
+relief-relay-ui/.next/
+
+# IDE
+.vscode/
+*.suo
+*.user
+
+# OS
+.DS_Store
+Thumbs.db

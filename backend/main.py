@@ -11,6 +11,7 @@ from ai.agent import run_intake_agent
 from ai.gemma import probe_ollama, probe_gemma_model
 from tools.pdf_export import generate_pdf
 from tools.case_manager import list_cases, get_case
+from config import settings
 
 # Load RAG index at startup (persisted — loads in seconds)
 vector_store = None
@@ -39,7 +40,7 @@ async def lifespan(app: FastAPI):
             import asyncio
             from ai.gemma import warm_model
 
-            warmed, warm_msg = asyncio.run(warm_model())
+            warmed, warm_msg = await warm_model()
             if warmed:
                 service_status["ollama"] = "ready"
             else:
@@ -51,7 +52,7 @@ async def lifespan(app: FastAPI):
 
     service_status["mode"] = "operational" if model_ready and vector_store is not None else "degraded"
     app.state.service_status = service_status
-    print(f"✓ ReliefRelay API ready ({service_status['mode']})")
+    print(f"[SUCCESS] ReliefRelay API ready ({service_status['mode']})")
     yield
 
 
@@ -88,7 +89,7 @@ def _validate_text_length(label: str, value: str) -> None:
         raise HTTPException(413, f"{label} exceeds {MAX_TEXT_CHARS} characters")
 
 
-# ── MAIN INTAKE ENDPOINT ───────────────────────────────────────────────
+# -- MAIN INTAKE ENDPOINT -----------------------------------------------
 @app.post("/intake")
 async def process_intake(
     image: UploadFile = File(None),       # Optional form photo
@@ -196,7 +197,7 @@ async def process_intake(
 _CASE_ID_RE = re.compile(r"^CASE-[0-9A-F]{6}$")
 
 
-# ── CASES ──────────────────────────────────────────────────────────────
+# -- CASES --------------------------------------------------------------
 @app.get("/cases")
 async def get_cases(limit: int = 50):
     """Return the most recent cases, newest first."""
@@ -213,7 +214,7 @@ async def get_case_by_id(case_id: str):
     return case
 
 
-# ── EXPORT ────────────────────────────────────────────────────────────
+# -- EXPORT -------------------------------------------------------------
 @app.get("/export/{case_id}/pdf")
 async def export_case_pdf(case_id: str):
     if not _CASE_ID_RE.match(case_id):
@@ -229,7 +230,7 @@ async def export_case_pdf(case_id: str):
     )
 
 
-# ── HEALTH CHECK ──────────────────────────────────────────────────────
+# -- HEALTH CHECK -------------------------------------------------------
 @app.get("/health")
 async def health():
     service_status = getattr(app.state, "service_status", {})

@@ -47,22 +47,25 @@ def probe_gemma_model(model: str | None = None) -> tuple[bool, str]:
     base_url = settings.OLLAMA_BASE_URL.rstrip("/")
     model_name = model or settings.GEMMA_MODEL
     try:
-        # prefer model list endpoint; this should be lightweight
-        r = httpx.get(f"{base_url}/api/models", timeout=2.0)
+        # Ollama returns {"models": [{"name": "...", ...}, ...]}
+        # Try /api/tags first (most compatible across versions)
+        r = httpx.get(f"{base_url}/api/tags", timeout=2.0)
         if r.is_success:
             try:
-                models = r.json()
-                names = [m.get("name") or m.get("model") or "" for m in models]
+                data = r.json()
+                # Response is {"models": [...]}, not a bare list
+                model_list = data.get("models", []) if isinstance(data, dict) else data
+                names = [m.get("name") or m.get("model") or "" for m in model_list if isinstance(m, dict)]
                 if any(model_name in n or n in model_name for n in names):
                     return True, "ready"
+                # Model list parsed but our model wasn't found
+                if names:
+                    return False, f"Model '{model_name}' not found. Available: {', '.join(names[:3])}"
             except Exception:
-                # if parsing failed, fall back to tag check
                 pass
-
-        # fallback: tags endpoint (older Ollama versions)
-        r2 = httpx.get(f"{base_url}/api/tags", timeout=2.0)
-        if r2.is_success:
+            # Tags endpoint responded — Ollama is up even if we couldn't parse
             return True, "ready"
+
         return False, f"HTTP {r.status_code}"
     except Exception as exc:  # pragma: no cover - best-effort probe
         return False, str(exc)
