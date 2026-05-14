@@ -535,6 +535,7 @@ All settings live in `backend/.env` (gitignored). Defaults are in `config.py`.
 | `GEMMA_MAX_CONCURRENCY` | `1` | Parallel inference limit |
 | `GEMMA_WARMUP` | `False` | Pre-load model at startup (disable for large models) |
 | `GEMMA_DETERMINISTIC` | `True` | Sets temperature=0 for reproducible output |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | `""` | Required for Crisis Operations Map |
 
 ---
 

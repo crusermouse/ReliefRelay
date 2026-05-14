@@ -320,7 +320,7 @@ export default function Home() {
           <div className="space-y-4">
             <IntakePanel onSubmit={handleSubmit} isLoading={loadingBanner} />
             <LiveReasoningTimeline loadingStep={loadingStep} isLoading={loadingBanner} events={result?.workflow_events ?? []} />
-            <CrisisOperationsMap />
+            <CrisisOperationsMap cases={cases} />
             <div className="grid lg:grid-cols-2 gap-4">
               <CaseActivityFeed latestCaseId={latestCaseId} />
               <motion.div
