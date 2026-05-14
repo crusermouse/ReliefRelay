@@ -105,9 +105,11 @@ export function OperationalReadinessPanel({
   backendReachable,
   isOnline,
 }: OperationalReadinessPanelProps) {
+  const [mounted, setMounted] = useState(false);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
+    setMounted(true);
     const t = setInterval(() => setTick((n) => n + 1), 3200);
     return () => clearInterval(t);
   }, []);
@@ -117,9 +119,12 @@ export function OperationalReadinessPanel({
   const backendStatus = backendReachable ? "ready" : "degraded";
   const ollamaStatus  = !backendReachable ? "unknown" : ollamaReady ? "ready" : "degraded";
   const vectorStatus  = !backendReachable ? "unknown" : vectorReady ? "ready" : "degraded";
-  const networkStatus = isOnline ? "ready" : "degraded";
+  
+  // Use true as default for SSR to match the default state in page.tsx
+  const effectiveIsOnline = mounted ? isOnline : true;
+  const networkStatus = effectiveIsOnline ? "ready" : "degraded";
 
-  const allReady = backendReachable && ollamaReady && vectorReady && isOnline;
+  const allReady = backendReachable && ollamaReady && vectorReady && effectiveIsOnline;
 
   return (
     <div className="space-y-3">
@@ -175,10 +180,10 @@ export function OperationalReadinessPanel({
             delay={0.26}
           />
           <ServiceRow
-            icon={isOnline ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
+            icon={effectiveIsOnline ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
             label="Network"
             status={networkStatus}
-            detail={isOnline ? "offline-first mode available" : "no connectivity"}
+            detail={effectiveIsOnline ? "offline-first mode available" : "no connectivity"}
             delay={0.33}
           />
         </div>
