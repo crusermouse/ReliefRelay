@@ -8,18 +8,50 @@ from pathlib import Path
 from ai.extractor import extract_from_image, extract_from_voice, extract_from_text
 from ai.rag import load_index, retrieve
 from ai.agent import run_intake_agent
+from ai.gemma import probe_ollama, probe_gemma_model
 from tools.pdf_export import generate_pdf
 from tools.case_manager import list_cases, get_case
 
 # Load RAG index at startup (persisted — loads in seconds)
 vector_store = None
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_TEXT_CHARS = 25000
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+ALLOWED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global vector_store
-    vector_store = load_index()
-    print("✓ ReliefRelay API ready")
+    service_status = {"backend": "ready"}
+    try:
+        vector_store = load_index()
+        service_status["vector_store"] = "ready"
+    except Exception as exc:
+        vector_store = None
+        service_status["vector_store"] = f"degraded: {exc}"
+
+    ollama_ready, ollama_message = probe_ollama()
+    model_ready, model_message = probe_gemma_model() if ollama_ready else (False, ollama_message)
+    # Optionally perform a lightweight warmup for demo readiness
+    if ollama_ready and model_ready and settings.GEMMA_WARMUP:
+        try:
+            import asyncio
+            from ai.gemma import warm_model
+
+            warmed, warm_msg = asyncio.run(warm_model())
+            if warmed:
+                service_status["ollama"] = "ready"
+            else:
+                service_status["ollama"] = f"warming_failed: {warm_msg}"
+        except Exception as exc:
+            service_status["ollama"] = f"warming_error: {exc}"
+    else:
+        service_status["ollama"] = "ready" if model_ready else f"degraded: {model_message}"
+
+    service_status["mode"] = "operational" if model_ready and vector_store is not None else "degraded"
+    app.state.service_status = service_status
+    print(f"✓ ReliefRelay API ready ({service_status['mode']})")
     yield
 
 
@@ -31,6 +63,29 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _validate_image_upload(image: UploadFile) -> None:
+    if not image.filename:
+        raise HTTPException(400, "Uploaded image is missing a filename")
+
+    suffix = Path(image.filename).suffix.lower()
+    if image.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(400, f"Unsupported image MIME type: {image.content_type or 'unknown'}")
+    if suffix not in ALLOWED_IMAGE_SUFFIXES:
+        raise HTTPException(400, f"Unsupported image extension: {suffix or 'unknown'}")
+
+
+async def _read_upload_bytes(image: UploadFile) -> bytes:
+    payload = await image.read()
+    if len(payload) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"Upload exceeds {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit")
+    return payload
+
+
+def _validate_text_length(label: str, value: str) -> None:
+    if len(value) > MAX_TEXT_CHARS:
+        raise HTTPException(413, f"{label} exceeds {MAX_TEXT_CHARS} characters")
 
 
 # ── MAIN INTAKE ENDPOINT ───────────────────────────────────────────────
@@ -45,33 +100,65 @@ async def process_intake(
     Returns: extracted record, triage level, action plan, resources, evidence
     """
     intake_record = None
+    extraction_errors: list[str] = []
+
+    _validate_text_length("Voice transcript", voice_text)
+    _validate_text_length("Manual notes", manual_text)
 
     # Step 1: Extract structured data from input
     if image and image.filename:
-        tmp_path = f"/tmp/{uuid.uuid4()}_{image.filename}"
-        async with aiofiles.open(tmp_path, "wb") as f:
-            await f.write(await image.read())
-        intake_record = extract_from_image(tmp_path)
-        Path(tmp_path).unlink(missing_ok=True)
+        try:
+            _validate_image_upload(image)
+            tmp_path = f"/tmp/{uuid.uuid4()}_{Path(image.filename).suffix.lower()}"
+            try:
+                payload = await _read_upload_bytes(image)
+                async with aiofiles.open(tmp_path, "wb") as f:
+                    await f.write(payload)
+                intake_record = await extract_from_image(tmp_path)
+            finally:
+                Path(tmp_path).unlink(missing_ok=True)
+        except Exception as exc:
+            extraction_errors.append(f"image: {exc}")
 
     if voice_text and not intake_record:
-        intake_record = extract_from_voice(voice_text)
+        try:
+            intake_record = await extract_from_voice(voice_text)
+        except Exception as exc:
+            extraction_errors.append(f"voice: {exc}")
     elif voice_text and intake_record:
         # Merge voice data into image-extracted data to fill gaps
-        voice_data = extract_from_voice(voice_text)
-        for field, val in voice_data.dict().items():
-            if val and not getattr(intake_record, field):
-                setattr(intake_record, field, val)
+        try:
+            voice_data = extract_from_voice(voice_text)
+            for field, val in voice_data.dict().items():
+                if val and not getattr(intake_record, field):
+                    setattr(intake_record, field, val)
+        except Exception as exc:
+            extraction_errors.append(f"voice-merge: {exc}")
 
     if manual_text and not intake_record:
-        intake_record = extract_from_text(manual_text)
+        try:
+            intake_record = await extract_from_text(manual_text)
+        except Exception as exc:
+            extraction_errors.append(f"manual: {exc}")
     elif manual_text and intake_record:
-        text_data = extract_from_text(manual_text)
-        for field, val in text_data.dict().items():
-            if val and not getattr(intake_record, field):
-                setattr(intake_record, field, val)
+        try:
+            text_data = await extract_from_text(manual_text)
+            for field, val in text_data.dict().items():
+                if val and not getattr(intake_record, field):
+                    setattr(intake_record, field, val)
+        except Exception as exc:
+            extraction_errors.append(f"manual-merge: {exc}")
 
     if not intake_record:
+        if extraction_errors:
+            raise HTTPException(
+                503,
+                detail={
+                    "message": "ReliefRelay is in degraded mode and could not extract a usable intake record.",
+                    "errors": extraction_errors,
+                    "service_status": getattr(app.state, "service_status", {}),
+                },
+            )
         raise HTTPException(400, "No valid input provided. Supply an image, voice_text, or manual_text.")
 
     intake_dict = intake_record.dict()
@@ -82,7 +169,17 @@ async def process_intake(
     rag_context = "\n\n".join([f"[{r['source']}] {r['content']}" for r in retrieved])
 
     # Step 3: Run the agent (tool calling + action plan generation)
-    agent_result = await run_intake_agent(intake_dict, rag_context)
+    try:
+        agent_result = await run_intake_agent(intake_dict, rag_context)
+    except Exception as exc:
+        raise HTTPException(
+            503,
+            detail={
+                "message": "ReliefRelay is in degraded mode and could not complete AI processing.",
+                "error": str(exc),
+                "service_status": getattr(app.state, "service_status", {}),
+            },
+        ) from exc
 
     return {
         "intake_record": intake_dict,
@@ -91,6 +188,8 @@ async def process_intake(
         "resources": agent_result["resources_found"],
         "evidence": retrieved,                    # For transparency rail in UI
         "tools_used": agent_result["tool_calls_made"],  # For audit display
+        "workflow_events": agent_result.get("workflow_events", []),
+        "operational_mode": agent_result.get("operational_mode", "full"),
     }
 
 
@@ -133,7 +232,12 @@ async def export_case_pdf(case_id: str):
 # ── HEALTH CHECK ──────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "1.0.0"}
+    service_status = getattr(app.state, "service_status", {})
+    return {
+        "status": service_status.get("mode", "degraded"),
+        "version": "1.0.0",
+        "services": service_status,
+    }
 
 
 # Run: uvicorn main:app --reload --port 8000

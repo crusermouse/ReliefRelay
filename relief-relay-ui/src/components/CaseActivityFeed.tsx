@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const FEED_EVENTS = [
@@ -29,29 +29,19 @@ export function CaseActivityFeed({ latestCaseId }: CaseActivityFeedProps) {
       })),
     [],
   );
-  const [items, setItems] = useState<Array<{ id: string; text: string; time: string }>>(seed);
+  const items = useMemo(() => {
+    if (!latestCaseId) {
+      return seed;
+    }
 
-  useEffect(() => {
-    if (!latestCaseId) return;
-    const timer = window.setTimeout(() => {
-      setItems((prev) => [{ id: latestCaseId, text: `Case ${latestCaseId} updated`, time: nowTime() }, ...prev].slice(0, 8));
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [latestCaseId]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      const randomText = FEED_EVENTS[Math.floor(Math.random() * FEED_EVENTS.length)];
-      setItems((prev) => [{ id: `${Date.now()}-${Math.random()}`, text: randomText, time: nowTime() }, ...prev].slice(0, 8));
-    }, 6800);
-    return () => window.clearInterval(timer);
-  }, []);
+    return [{ id: latestCaseId, text: `Case ${latestCaseId} updated`, time: nowTime() }, ...seed].slice(0, 8);
+  }, [latestCaseId, seed]);
 
   return (
     <section className="glass-panel rounded-2xl p-4 md:p-5">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-white">Case Activity Feed</h3>
-        <span className="text-[10px] md:text-xs text-cyan-300 font-mono">AUTOSCROLL · LIVE</span>
+        <span className="text-[10px] md:text-xs text-cyan-300 font-mono">CASE EVENTS · REAL</span>
       </div>
       <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
         <AnimatePresence initial={false}>

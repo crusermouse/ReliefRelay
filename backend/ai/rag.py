@@ -71,13 +71,16 @@ def load_index() -> Chroma:
 # ── RETRIEVAL ──────────────────────────────────────────────────────────
 def retrieve(
     query: str,
-    vector_store: Chroma,
+    vector_store: Chroma | None,
     k: int = 4,
 ) -> list[dict]:
     """
     Retrieve top-k most relevant policy/SOP chunks for a given query.
     Returns a list of dicts with 'content' and 'source' keys.
     """
+    if vector_store is None:
+        return []
+
     try:
         results = vector_store.similarity_search(query, k=k)
         return [

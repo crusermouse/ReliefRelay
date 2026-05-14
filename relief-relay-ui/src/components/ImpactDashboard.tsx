@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 
 interface ImpactDashboardProps {
   totalCases: number;
@@ -16,20 +16,31 @@ const METRIC_BASE = [
 
 function Counter({ value }: { value: number }) {
   const [display, setDisplay] = useState(0);
+  const reduceMotion = useReducedMotion();
+
   useEffect(() => {
-    const total = 550;
-    const step = Math.max(1, Math.floor(value / 24));
-    const interval = window.setInterval(() => {
-      setDisplay((prev) => {
-        if (prev >= value) {
-          window.clearInterval(interval);
-          return value;
-        }
-        return Math.min(value, prev + step);
-      });
-    }, Math.max(16, Math.floor(total / 24)));
-    return () => window.clearInterval(interval);
-  }, [value]);
+    const timeout = window.setTimeout(() => {
+      if (reduceMotion) {
+        setDisplay(value);
+        return;
+      }
+
+      const total = 550;
+      const step = Math.max(1, Math.floor(value / 24));
+      const interval = window.setInterval(() => {
+        setDisplay((prev) => {
+          if (prev >= value) {
+            window.clearInterval(interval);
+            return value;
+          }
+          return Math.min(value, prev + step);
+        });
+      }, Math.max(16, Math.floor(total / 24)));
+      window.setTimeout(() => window.clearInterval(interval), total);
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
+  }, [reduceMotion, value]);
   return <span>{display}</span>;
 }
 

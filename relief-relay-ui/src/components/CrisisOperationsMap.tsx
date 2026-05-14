@@ -1,5 +1,6 @@
 "use client";
 
+import { useReducedMotion } from "framer-motion";
 import { motion } from "framer-motion";
 
 const MARKERS = [
@@ -18,6 +19,8 @@ const COLORS = {
 };
 
 export function CrisisOperationsMap() {
+  const reduceMotion = useReducedMotion();
+
   return (
     <section className="glass-panel rounded-2xl p-4 md:p-5">
       <div className="flex items-center justify-between mb-3">
@@ -39,8 +42,8 @@ export function CrisisOperationsMap() {
             className="absolute -translate-x-1/2 -translate-y-1/2 group"
           >
             <motion.div
-              animate={{ scale: [1, 1.8, 1], opacity: [0.6, 0.08, 0.6] }}
-              transition={{ repeat: Infinity, duration: 2.2 + idx * 0.2 }}
+              animate={reduceMotion ? { opacity: 0.45 } : { scale: [1, 1.8, 1], opacity: [0.6, 0.08, 0.6] }}
+              transition={reduceMotion ? { duration: 0 } : { repeat: Infinity, duration: 2.2 + idx * 0.2 }}
               className={`absolute inset-0 rounded-full blur-[1px] ${COLORS[marker.type]} w-4 h-4`}
             />
             <div className={`relative w-3 h-3 rounded-full shadow-lg ${COLORS[marker.type]}`} />

@@ -1,12 +1,15 @@
 import json
 import re
 import html
+from functools import lru_cache
 from pathlib import Path
 from datetime import datetime
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 from tools.case_manager import get_case
 
@@ -18,6 +21,38 @@ _CASE_ID_RE = re.compile(r"^CASE-[0-9A-F]{6}$")
 _INVALID_TEXT_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
 
 
+@lru_cache(maxsize=1)
+def _register_fonts() -> tuple[str, str]:
+    """Prefer a Unicode-capable font, but fall back safely if unavailable."""
+    candidates = [
+        ("DejaVuSans", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+        ("LiberationSans", "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"),
+    ]
+    bold_candidates = [
+        ("DejaVuSans-Bold", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        ("LiberationSans-Bold", "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf"),
+    ]
+
+    body_font = "Helvetica"
+    bold_font = "Helvetica-Bold"
+    for font_name, font_path in candidates:
+        if Path(font_path).exists():
+            pdfmetrics.registerFont(TTFont(font_name, font_path))
+            body_font = font_name
+            break
+
+    for font_name, font_path in bold_candidates:
+        if Path(font_path).exists():
+            pdfmetrics.registerFont(TTFont(font_name, font_path))
+            bold_font = font_name
+            break
+
+    if body_font == "Helvetica" and bold_font == "Helvetica-Bold":
+        return body_font, bold_font
+
+    return body_font, bold_font
+
+
 def _validate_case_id(case_id: str) -> str:
     """Validate that case_id matches the expected safe pattern."""
     if not _CASE_ID_RE.match(case_id):
@@ -25,7 +60,13 @@ def _validate_case_id(case_id: str) -> str:
     return case_id
 
 
-def _safe_text(value, default: str = "") -> str:
+def _truncate_text(text: str, limit: int = 1800) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)].rstrip() + "…"
+
+
+def _safe_text(value, default: str = "", limit: int = 1800) -> str:
     """Convert arbitrary values to safe plain text for ReportLab Paragraph."""
     if value is None:
         raw = default
@@ -40,7 +81,23 @@ def _safe_text(value, default: str = "") -> str:
         raw = default
 
     raw = _INVALID_TEXT_RE.sub(" ", raw)
-    return html.escape(raw, quote=True)
+    return html.escape(_truncate_text(raw, limit=limit), quote=True)
+
+
+def _append_paragraph(story: list, text: str, style, limit: int = 1800) -> None:
+    safe_text = _safe_text(text, limit=limit)
+    try:
+        story.append(Paragraph(safe_text, style))
+    except Exception:
+        story.append(Paragraph(_safe_text("Content unavailable due to formatting limits."), style))
+
+
+def _append_line_block(story: list, title: str, body: str, style, max_chars: int = 1800) -> None:
+    story.append(Paragraph(title, style))
+    for line in str(body).splitlines():
+        if line.strip():
+            _append_paragraph(story, line, style, limit=max_chars)
+            story.append(Spacer(1, 0.08 * cm))
 
 TRIAGE_COLORS = {
     "RED": colors.HexColor("#ef4444"),
@@ -68,6 +125,9 @@ def generate_pdf(case_id: str) -> str:
     )
 
     styles = getSampleStyleSheet()
+    body_font, bold_font = _register_fonts()
+    styles["Normal"].fontName = body_font
+    styles["Heading2"].fontName = bold_font
     story = []
 
     # ── Header ────────────────────────────────────────────────────────
@@ -87,11 +147,11 @@ def generate_pdf(case_id: str) -> str:
     triage_style = ParagraphStyle(
         "Triage",
         fontSize=14,
-        fontName="Helvetica-Bold",
+        fontName=bold_font,
         textColor=triage_color,
     )
     story.append(Paragraph(f"TRIAGE LEVEL: {triage_level_text}", triage_style))
-    story.append(Paragraph(f"Case ID: {_safe_text(case_id)}", styles["Normal"]))
+    story.append(Paragraph(f"Case ID: {_safe_text(case_id, limit=64)}", styles["Normal"]))
     story.append(Paragraph(
         f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
         styles["Normal"],
@@ -107,34 +167,34 @@ def generate_pdf(case_id: str) -> str:
 
     table_data = [
         ["Field", "Value"],
-        ["Name", _safe_text(intake.get("name"), "Unknown")],
-        ["Age", _safe_text(intake.get("age"), "Unknown")],
-        ["Gender", _safe_text(intake.get("gender"), "Unknown")],
-        ["Location Found", _safe_text(intake.get("location_found"), "Unknown")],
-        ["Medical Urgency", _safe_text(medical_urgency, "NONE")],
-        ["Family Members", _safe_text(intake.get("family_members", 1), "1")],
-        ["Language", _safe_text(intake.get("language_preference", "English"), "English")],
+        ["Name", _safe_text(intake.get("name"), "Unknown", 240)],
+        ["Age", _safe_text(intake.get("age"), "Unknown", 64)],
+        ["Gender", _safe_text(intake.get("gender"), "Unknown", 128)],
+        ["Location Found", _safe_text(intake.get("location_found"), "Unknown", 240)],
+        ["Medical Urgency", _safe_text(medical_urgency, "NONE", 64)],
+        ["Family Members", _safe_text(intake.get("family_members", 1), "1", 64)],
+        ["Language", _safe_text(intake.get("language_preference", "English"), "English", 128)],
         ["Shelter Needed", "Yes" if intake.get("shelter_needed") else "No"],
         ["Food Needed", "Yes" if intake.get("food_needed") else "No"],
         ["Water Needed", "Yes" if intake.get("water_needed") else "No"],
-        ["Medication", _safe_text(intake.get("medication_needed"), "None")],
-        ["Special Needs", _safe_text(intake.get("special_needs"), "None")],
+        ["Medication", _safe_text(intake.get("medication_needed"), "None", 240)],
+        ["Special Needs", _safe_text(intake.get("special_needs"), "None", 240)],
     ]
 
     issues = intake.get("presenting_issues", [])
     if issues:
-        table_data.append(["Presenting Issues", _safe_text(issues, "None")])
+        table_data.append(["Presenting Issues", _safe_text(issues, "None", 260)])
 
     t = Table(table_data, colWidths=[5 * cm, 12 * cm])
     t.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1e293b")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (-1, 0), bold_font),
         ("FONTSIZE", (0, 0), (-1, 0), 10),
         ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#f8fafc")),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f1f5f9")]),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
-        ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
+        ("FONTNAME", (0, 1), (0, -1), bold_font),
         ("FONTSIZE", (0, 1), (-1, -1), 9),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("PADDING", (0, 0), (-1, -1), 6),
@@ -150,7 +210,7 @@ def generate_pdf(case_id: str) -> str:
         story.append(Spacer(1, 0.2 * cm))
         for line in str(action_plan).splitlines():
             if line.strip():
-                story.append(Paragraph(_safe_text(line), styles["Normal"]))
+                _append_paragraph(story, line, styles["Normal"], limit=1200)
                 story.append(Spacer(1, 0.1 * cm))
         story.append(Spacer(1, 0.5 * cm))
 
@@ -159,7 +219,7 @@ def generate_pdf(case_id: str) -> str:
     if missing:
         story.append(Paragraph("Missing Information — Ask Next", styles["Heading2"]))
         for item in missing:
-            item_text = _safe_text(item)
+            item_text = _safe_text(item, limit=240)
             if item_text.strip():
                 story.append(Paragraph(f"• {item_text}", styles["Normal"]))
         story.append(Spacer(1, 0.5 * cm))
@@ -172,5 +232,17 @@ def generate_pdf(case_id: str) -> str:
         footer_style,
     ))
 
-    doc.build(story)
+    try:
+        doc.build(story)
+    except Exception:
+        fallback_story = [
+            Paragraph("ReliefRelay — Referral Packet", title_style),
+            Spacer(1, 0.3 * cm),
+            Paragraph(f"Case ID: {_safe_text(case_id, limit=64)}", styles["Normal"]),
+            Paragraph(f"TRIAGE LEVEL: {_safe_text(triage_level, 'GREEN', 24)}", triage_style),
+            Spacer(1, 0.4 * cm),
+            Paragraph("Action Plan", styles["Heading2"]),
+            Paragraph(_safe_text(action_plan or "No action plan available.", limit=1800), styles["Normal"]),
+        ]
+        doc.build(fallback_story)
     return str(output_path)

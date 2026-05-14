@@ -25,6 +25,11 @@ export interface EvidenceChunk {
   source: string;
 }
 
+export interface WorkflowEvent {
+  stage: string;
+  status: string;
+}
+
 export interface IntakeResponse {
   intake_record: IntakeRecord;
   case_id: string;
@@ -32,6 +37,8 @@ export interface IntakeResponse {
   resources: Record<string, unknown>;
   evidence: EvidenceChunk[];
   tools_used: string[];
+  workflow_events?: WorkflowEvent[];
+  operational_mode?: "full" | "degraded";
 }
 
 export interface Case {
@@ -46,4 +53,17 @@ export interface Case {
 export interface CasesResponse {
   cases: Case[];
   total: number;
+}
+
+export interface ServiceHealth {
+  backend: string;
+  vector_store: string;
+  ollama: string;
+  mode: string;
+}
+
+export interface HealthResponse {
+  status: string;
+  version: string;
+  services: ServiceHealth;
 }

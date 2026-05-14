@@ -20,6 +20,17 @@ export function IntakePanel({ onSubmit, isLoading }: IntakePanelProps) {
   const [manualText, setManualText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState<boolean | null>(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+
+    const SpeechRecognitionAPI =
+      (window as unknown as { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition ||
+      (window as unknown as { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition;
+    return Boolean(SpeechRecognitionAPI);
+  });
+  const [speechError, setSpeechError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
@@ -46,12 +57,14 @@ export function IntakePanel({ onSubmit, isLoading }: IntakePanelProps) {
   const handleDragLeave = () => setIsDragging(false);
 
   const startRecording = () => {
+    setSpeechError(null);
     const SpeechRecognitionAPI =
       (window as unknown as { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition ||
       (window as unknown as { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition;
 
     if (!SpeechRecognitionAPI) {
-      alert("Speech recognition is not supported in this browser. Use Chrome.");
+      setSpeechSupported(false);
+      setSpeechError("Speech recognition is not supported in this browser. Paste the transcript below instead.");
       return;
     }
     const recognition = new SpeechRecognitionAPI();
@@ -63,6 +76,11 @@ export function IntakePanel({ onSubmit, isLoading }: IntakePanelProps) {
         .join(" ");
       setVoiceText(transcript);
     };
+    recognition.onerror = () => {
+      setSpeechError("Voice capture stopped unexpectedly. You can still paste the transcript manually.");
+      setIsRecording(false);
+    };
+    recognition.onend = () => setIsRecording(false);
     recognition.start();
     recognitionRef.current = recognition;
     setIsRecording(true);
@@ -100,13 +118,16 @@ export function IntakePanel({ onSubmit, isLoading }: IntakePanelProps) {
       </div>
 
       {/* Mode tabs */}
-      <div className="flex gap-1 bg-white/[0.04] rounded-lg p-1">
+      <div className="flex gap-1 bg-white/[0.04] rounded-lg p-1" role="tablist" aria-label="Intake input modes">
         {(["image", "voice", "text"] as InputMode[]).map((m) => (
           <button
             key={m}
             onClick={() => setMode(m)}
+            role="tab"
+            aria-selected={mode === m}
+            aria-label={`Switch to ${m} input mode`}
             className={clsx(
-              "flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all capitalize flex items-center justify-center gap-2",
+              "flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all capitalize flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70",
               mode === m
                 ? "bg-blue-600 text-white"
                 : "text-gray-400 hover:text-gray-200",
@@ -144,8 +165,17 @@ export function IntakePanel({ onSubmit, isLoading }: IntakePanelProps) {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onClick={() => fileInputRef.current?.click()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+              tabIndex={0}
+              role="button"
+              aria-label="Upload or drop a form photo"
               className={clsx(
-                "border-2 border-dashed rounded-xl p-12 flex flex-col items-center gap-3 cursor-pointer transition-all",
+                "border-2 border-dashed rounded-xl p-12 flex flex-col items-center gap-3 cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70",
                 isDragging
                   ? "border-blue-400 bg-blue-500/10"
                   : "border-white/10 hover:border-white/20 bg-white/[0.02] hover:bg-white/[0.04]",
@@ -163,7 +193,7 @@ export function IntakePanel({ onSubmit, isLoading }: IntakePanelProps) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/png,image/jpeg,image/webp"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -179,23 +209,38 @@ export function IntakePanel({ onSubmit, isLoading }: IntakePanelProps) {
           <div className="flex justify-center">
             <button
               onClick={isRecording ? stopRecording : startRecording}
+              aria-label={isRecording ? "Stop voice recording" : "Start voice recording"}
+              disabled={speechSupported === false}
               className={clsx(
-                "w-20 h-20 rounded-full flex items-center justify-center transition-all",
+                "w-20 h-20 rounded-full flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70",
                 isRecording
                   ? "bg-red-500/20 border-2 border-red-500 text-red-400 animate-pulse"
-                  : "bg-blue-500/20 border-2 border-blue-500 text-blue-400 hover:bg-blue-500/30",
+                  : speechSupported === false
+                    ? "bg-white/5 border-2 border-white/10 text-gray-600 cursor-not-allowed"
+                    : "bg-blue-500/20 border-2 border-blue-500 text-blue-400 hover:bg-blue-500/30",
               )}
             >
-              {isRecording ? (
-                <MicOff className="w-8 h-8" />
-              ) : (
-                <Mic className="w-8 h-8" />
-              )}
+              {isRecording ? <MicOff className="w-8 h-8" /> : <Mic className="w-8 h-8" />}
             </button>
           </div>
           <p className="text-center text-sm text-gray-500">
-            {isRecording ? "Recording… click to stop" : "Click to start recording"}
+            {isRecording ? "Recording… click to stop" : speechSupported === false ? "Voice input is unavailable here, so paste the transcript below." : "Click to start recording"}
           </p>
+          {speechError && (
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+              {speechError}
+            </div>
+          )}
+          {speechSupported === false && (
+            <textarea
+              value={voiceText}
+              onChange={(e) => setVoiceText(e.target.value)}
+              placeholder="Paste a transcript here if speech recognition is unavailable."
+              rows={6}
+              aria-label="Voice transcript fallback"
+              className="w-full bg-white/[0.03] border border-white/10 rounded-xl p-4 text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50 resize-none text-sm leading-relaxed"
+            />
+          )}
           {voiceText && (
             <div className="bg-white/[0.03] border border-white/10 rounded-lg p-4">
               <p className="text-xs text-gray-500 mb-2 uppercase tracking-widest">Transcript</p>
@@ -207,13 +252,18 @@ export function IntakePanel({ onSubmit, isLoading }: IntakePanelProps) {
 
       {/* Text input */}
       {mode === "text" && (
+        <label className="block space-y-2">
+          <span className="sr-only">Manual intake notes</span>
         <textarea
           value={manualText}
           onChange={(e) => setManualText(e.target.value)}
           placeholder="Type intake notes here — name, age, location, injuries, needs…"
           rows={8}
+          maxLength={25000}
+          aria-label="Manual intake notes"
           className="w-full bg-white/[0.03] border border-white/10 rounded-xl p-4 text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50 resize-none text-sm leading-relaxed"
         />
+        </label>
       )}
 
       {/* Submit */}

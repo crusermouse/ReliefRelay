@@ -1,7 +1,8 @@
 import json
+import re
 from pydantic import BaseModel, Field
 from typing import Optional, Literal
-from ai.gemma import chat_vision, chat_text
+from ai.gemma import chat_vision, chat_text, OllamaUnavailableError
 
 # ── OUTPUT SCHEMA (Pydantic validates Gemma's JSON output) ─────────────
 class IntakeRecord(BaseModel):
@@ -21,6 +22,49 @@ class IntakeRecord(BaseModel):
     missing_information: list[str] = Field(default_factory=list)
     extraction_confidence: Literal["low", "medium", "high"] = "low"
     raw_transcription: Optional[str] = None
+
+
+def _fallback_intake_from_text(text: str) -> IntakeRecord:
+    lowered = text.lower()
+
+    issues: list[str] = []
+    keyword_map = {
+        "chest pain": "chest pain",
+        "breathing": "difficulty breathing",
+        "bleeding": "bleeding",
+        "burn": "burns",
+        "dehydration": "dehydration",
+        "fever": "fever",
+        "injury": "injury",
+        "pain": "pain",
+    }
+    for keyword, label in keyword_map.items():
+        if keyword in lowered and label not in issues:
+            issues.append(label)
+
+    if any(term in lowered for term in ["chest pain", "unconscious", "not breathing", "severe bleeding", "difficulty breathing"]):
+        urgency = "critical"
+    elif any(term in lowered for term in ["urgent", "severe", "needs doctor", "needs medical", "hospital"]):
+        urgency = "high"
+    elif any(term in lowered for term in ["shelter", "food", "water", "needs help", "support"]):
+        urgency = "medium"
+    else:
+        urgency = "low" if issues else "none"
+
+    family_match = re.search(r"\b(\d{1,2})\s*(?:people|persons|family|famil(?:y|ies))\b", lowered)
+    family_members = int(family_match.group(1)) if family_match else 1
+
+    return IntakeRecord(
+        presenting_issues=issues,
+        medical_urgency=urgency,  # type: ignore[arg-type]
+        shelter_needed=any(term in lowered for term in ["shelter", "evacuate", "evacuation"]),
+        food_needed="food" in lowered,
+        water_needed=any(term in lowered for term in ["water", "dehydration"]),
+        family_members=family_members,
+        missing_information=["name", "age", "location_found"],
+        extraction_confidence="low",
+        raw_transcription=text,
+    )
 
 
 # ── EXTRACTION SYSTEM PROMPT ───────────────────────────────────────────
@@ -48,13 +92,13 @@ extraction_confidence, raw_transcription (verbatim text from the form).
 Return ONLY the JSON object."""
 
 
-def extract_from_image(image_path: str) -> IntakeRecord:
+async def extract_from_image(image_path: str) -> IntakeRecord:
     """Run Gemma 4 vision on a form image and parse the structured output."""
-    raw = chat_vision(
+    raw = await chat_vision(
         prompt=EXTRACTION_PROMPT_IMAGE,
         image_path=image_path,
         system=EXTRACTION_SYSTEM,
-        detail="high",  # Maximum detail for handwritten forms
+        detail="high",
         json_mode=True,
     )
     try:
@@ -67,7 +111,7 @@ def extract_from_image(image_path: str) -> IntakeRecord:
             f"Fix this invalid JSON to match the IntakeRecord schema:\n{raw}\n"
             f"Error: {e}\nReturn ONLY valid JSON."
         )
-        fixed = chat_text(fix_prompt, json_mode=True)
+        fixed = await chat_text(fix_prompt, json_mode=True)
         try:
             return IntakeRecord(**json.loads(fixed))
         except Exception as fallback_err:
@@ -76,23 +120,29 @@ def extract_from_image(image_path: str) -> IntakeRecord:
             ) from fallback_err
 
 
-def extract_from_voice(transcription: str) -> IntakeRecord:
+async def extract_from_voice(transcription: str) -> IntakeRecord:
     """Extract structured data from a voice note transcription."""
     prompt = f"""Voice note transcription from a relief intake:
 ---
 {transcription}
 ---
 Extract the intake information and return a JSON object."""
-    raw = chat_text(prompt, system=EXTRACTION_SYSTEM, json_mode=True)
-    return IntakeRecord(**json.loads(raw))
+    try:
+        raw = await chat_text(prompt, system=EXTRACTION_SYSTEM, json_mode=True)
+        return IntakeRecord(**json.loads(raw))
+    except (OllamaUnavailableError, Exception):
+        return _fallback_intake_from_text(transcription)
 
 
-def extract_from_text(manual_text: str) -> IntakeRecord:
+async def extract_from_text(manual_text: str) -> IntakeRecord:
     """Extract structured data from manually entered text notes."""
     prompt = f"""Manually entered relief intake notes:
 ---
 {manual_text}
 ---
 Extract the intake information and return a JSON object."""
-    raw = chat_text(prompt, system=EXTRACTION_SYSTEM, json_mode=True)
-    return IntakeRecord(**json.loads(raw))
+    try:
+        raw = await chat_text(prompt, system=EXTRACTION_SYSTEM, json_mode=True)
+        return IntakeRecord(**json.loads(raw))
+    except (OllamaUnavailableError, Exception):
+        return _fallback_intake_from_text(manual_text)

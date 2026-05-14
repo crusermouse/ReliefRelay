@@ -1,4 +1,4 @@
-import type { IntakeResponse, CasesResponse, Case } from "./types";
+import type { IntakeResponse, CasesResponse, Case, HealthResponse } from "./types";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -25,6 +25,12 @@ export async function fetchCases(limit = 50): Promise<CasesResponse> {
 
 export async function fetchCase(caseId: string): Promise<Case> {
   const res = await fetch(`${API}/cases/${caseId}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function fetchHealth(): Promise<HealthResponse> {
+  const res = await fetch(`${API}/health`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }

@@ -49,8 +49,11 @@ export function CaseList({ cases, selectedCaseId, onSelect }: CaseListProps) {
             <button
               key={c.case_id}
               onClick={() => onSelect(c.case_id)}
+              type="button"
+              aria-pressed={selectedCaseId === c.case_id}
+              aria-label={`View case ${c.case_id}`}
               className={clsx(
-                "w-full text-left px-4 py-3 hover:bg-white/[0.03] transition-colors border-b border-white/[0.04] last:border-0",
+                "w-full text-left px-4 py-3 hover:bg-white/[0.03] transition-colors border-b border-white/[0.04] last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70",
                 selectedCaseId === c.case_id && "bg-blue-500/5",
               )}
             >
