@@ -72,6 +72,7 @@ def generate_pdf(case_id: str) -> str:
 
     # ── Header ────────────────────────────────────────────────────────
     triage_level = str(case.get("triage_level", "GREEN")).upper()
+    triage_level_text = _safe_text(triage_level, "GREEN")
     triage_color = TRIAGE_COLORS.get(triage_level, colors.green)
 
     title_style = ParagraphStyle(
@@ -89,7 +90,7 @@ def generate_pdf(case_id: str) -> str:
         fontName="Helvetica-Bold",
         textColor=triage_color,
     )
-    story.append(Paragraph(f"TRIAGE LEVEL: {_safe_text(triage_level, 'GREEN')}", triage_style))
+    story.append(Paragraph(f"TRIAGE LEVEL: {triage_level_text}", triage_style))
     story.append(Paragraph(f"Case ID: {_safe_text(case_id)}", styles["Normal"]))
     story.append(Paragraph(
         f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
@@ -102,13 +103,15 @@ def generate_pdf(case_id: str) -> str:
     intake = case.get("intake_data", {})
     story.append(Paragraph("Intake Information", styles["Heading2"]))
 
+    medical_urgency = str(intake.get("medical_urgency", "none")).upper()
+
     table_data = [
         ["Field", "Value"],
         ["Name", _safe_text(intake.get("name"), "Unknown")],
         ["Age", _safe_text(intake.get("age"), "Unknown")],
         ["Gender", _safe_text(intake.get("gender"), "Unknown")],
         ["Location Found", _safe_text(intake.get("location_found"), "Unknown")],
-        ["Medical Urgency", _safe_text(str(intake.get("medical_urgency", "none")).upper(), "NONE")],
+        ["Medical Urgency", _safe_text(medical_urgency, "NONE")],
         ["Family Members", _safe_text(intake.get("family_members", 1), "1")],
         ["Language", _safe_text(intake.get("language_preference", "English"), "English")],
         ["Shelter Needed", "Yes" if intake.get("shelter_needed") else "No"],
