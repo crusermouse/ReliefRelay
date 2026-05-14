@@ -70,3 +70,29 @@ async def process_intake(
         "evidence": retrieved,                    # For transparency rail in UI
         "tools_used": agent_result["tool_calls_made"],  # For audit display
     }
+
+
+@router.post("/demo-intake")
+async def demo_intake(demo_id: str = Form(...)):
+    """
+    Returns pre-cached demo case for instant display (no inference).
+    Used by frontend for live demos without waiting for Gemma 4 inference.
+    
+    Args:
+        demo_id: One of 'earthquake-critical', 'refugee-camp-moderate', 'recovery-phase-low'
+    """
+    import json
+    from pathlib import Path
+    
+    demo_dir = Path(__file__).parent.parent.parent / "relief-relay-ui" / "public" / "demo-cache"
+    valid_demos = ["earthquake-critical", "refugee-camp-moderate", "recovery-phase-low"]
+    
+    if demo_id not in valid_demos:
+        raise HTTPException(400, f"Invalid demo_id. Must be one of: {', '.join(valid_demos)}")
+    
+    demo_file = demo_dir / f"{demo_id}.json"
+    if not demo_file.exists():
+        raise HTTPException(500, f"Demo file not found: {demo_file}")
+    
+    with open(demo_file, "r") as f:
+        return json.load(f)

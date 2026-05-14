@@ -23,12 +23,22 @@ export function EvidenceRail({ evidence, toolsUsed }: EvidenceRailProps) {
       </div>
 
       <div className="rounded-lg border border-cyan-400/20 bg-cyan-500/[0.04] p-3">
-        <p className="text-[11px] uppercase tracking-[0.14em] text-cyan-300 mb-2">Reasoning Graph</p>
+        <p className="text-[11px] uppercase tracking-[0.14em] text-cyan-300 mb-2 flex items-center gap-2">
+          <ShieldCheck className="w-3 h-3" />
+          Decision Reasoning
+        </p>
         <div className="space-y-2">
           {["Extracted Case Fact", topSource, "High-Risk Classification", "Immediate Medical Referral"].map((node, i) => (
-            <motion.div key={node} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }} className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(105,212,255,0.7)]" />
-              <span className="text-xs text-gray-200">{node}</span>
+            <motion.div 
+              key={node} 
+              initial={{ opacity: 0, x: -10 }} 
+              animate={{ opacity: 1, x: 0 }} 
+              transition={{ delay: i * 0.08 }}
+              className="flex items-center gap-3 group cursor-default"
+            >
+              <div className="w-2 h-2 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(105,212,255,0.7)] group-hover:shadow-[0_0_15px_rgba(105,212,255,1)] transition-shadow" />
+              <span className="text-xs text-gray-200 group-hover:text-gray-100 transition-colors">{node}</span>
+              {i < 3 && <span className="text-[8px] text-gray-600 ml-auto">→</span>}
             </motion.div>
           ))}
         </div>
@@ -36,16 +46,19 @@ export function EvidenceRail({ evidence, toolsUsed }: EvidenceRailProps) {
 
       {/* Tool calls audit */}
       {toolsUsed.length > 0 && (
-        <div>
-          <p className="text-xs text-gray-500 mb-2 uppercase tracking-widest">Tools called by Gemma 4</p>
+        <div className="rounded-lg border border-purple-400/20 bg-purple-500/[0.04] p-3">
+          <p className="text-xs text-purple-300 mb-2 uppercase tracking-widest font-semibold">🔧 Tools Called by Gemma 4</p>
           <div className="flex flex-wrap gap-1.5">
             {toolsUsed.map((tool, i) => (
-              <span
+              <motion.span
                 key={i}
-                className="bg-purple-500/10 text-purple-300 text-xs font-mono px-2 py-1 rounded border border-purple-500/20"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: i * 0.05 }}
+                className="bg-gradient-to-r from-purple-500/20 to-pink-500/10 text-purple-300 text-xs font-mono px-2.5 py-1.5 rounded border border-purple-500/30 hover:border-purple-400/50 hover:shadow-[0_0_12px_rgba(168,85,247,0.3)] transition-all"
               >
                 {tool}()
-              </span>
+              </motion.span>
             ))}
           </div>
         </div>

@@ -1,12 +1,19 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Upload, Mic, MicOff, Type, Send, X } from "lucide-react";
+import { Upload, Mic, MicOff, Type, Send, X, Zap } from "lucide-react";
 import clsx from "clsx";
 
+interface DemoCase {
+  id: string;
+  title: string;
+  description: string;
+  triage: "critical" | "medium" | "low";
+}
+
 interface IntakePanelProps {
-  onSubmit: (image?: File, voiceText?: string, manualText?: string) => void;
+  onSubmit: (image?: File, voiceText?: string, manualText?: string, demoId?: string) => void;
   isLoading: boolean;
 }
 
@@ -14,6 +21,8 @@ type InputMode = "image" | "voice" | "text";
 
 export function IntakePanel({ onSubmit, isLoading }: IntakePanelProps) {
   const [mode, setMode] = useState<InputMode>("image");
+  const [demoMode, setDemoMode] = useState(false);
+  const [demoCases, setDemoCases] = useState<DemoCase[]>([]);
   const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [voiceText, setVoiceText] = useState("");
@@ -33,6 +42,20 @@ export function IntakePanel({ onSubmit, isLoading }: IntakePanelProps) {
   const [speechError, setSpeechError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+
+  // Load demo cases on mount
+  useEffect(() => {
+    const loadDemos = async () => {
+      try {
+        const response = await fetch("/demo-cache/index.json");
+        const data = await response.json();
+        setDemoCases(data.demos || []);
+      } catch (error) {
+        console.warn("Failed to load demo cases:", error);
+      }
+    };
+    loadDemos();
+  }, []);
 
   const handleFileSelect = (file: File) => {
     setImage(file);
@@ -105,41 +128,139 @@ export function IntakePanel({ onSubmit, isLoading }: IntakePanelProps) {
     );
   };
 
+  const handleDemoSubmit = (demoId: string) => {
+    onSubmit(undefined, undefined, undefined, demoId);
+  };
+
   const hasInput = !!image || !!voiceText || !!manualText;
 
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto space-y-6 glass-panel rounded-2xl p-5 md:p-6">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.17em] text-cyan-300 mb-1">Humanitarian Intake Console</p>
-        <h1 className="text-2xl font-bold text-white mb-1">Mission Intake Processing</h1>
-        <p className="text-gray-300 text-sm">
-          Upload a form photo, record a voice note, or type notes. Gemma 4 orchestrates extraction, triage, and response routing.
-        </p>
+    <motion.div 
+      initial={{ opacity: 0, y: 8 }} 
+      animate={{ opacity: 1, y: 0 }} 
+      className="max-w-2xl mx-auto space-y-6 glass-panel rounded-2xl p-5 md:p-6"
+      data-intake-panel
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1">
+          <p className="text-[11px] uppercase tracking-[0.17em] text-cyan-300 mb-1">Humanitarian Intake Console</p>
+          <h1 className="text-2xl font-bold text-white mb-1">Mission Intake Processing</h1>
+          <p className="text-gray-300 text-sm">
+            {demoMode ? "🚀 See ReliefRelay in action with live demo scenarios (instant <100ms)" : "Upload a form photo, record a voice note, or type notes. Gemma 4 orchestrates extraction, triage, and response routing."}
+          </p>
+        </div>
+        {/* Demo Mode Toggle - High Visibility CTA */}
+        <motion.button
+          onClick={() => {
+            setDemoMode(!demoMode);
+            if (!demoMode) {
+              // Clear any existing input when entering demo mode
+              setImage(null);
+              setImagePreview(null);
+              setVoiceText("");
+              setManualText("");
+            }
+          }}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className={clsx(
+            "flex items-center gap-2 px-4 py-3 md:px-4 md:py-3 rounded-xl text-xs md:text-sm font-bold whitespace-nowrap transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 focus-visible:ring-cyan-400 min-h-[44px] flex-shrink-0",
+            demoMode
+              ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/50 border border-amber-400"
+              : "bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-lg shadow-blue-500/50 border border-blue-400 hover:shadow-blue-500/70",
+          )}
+          title={demoMode ? "Click to use live inference mode" : "Click for instant 30-second demo (no waiting)"}
+        >
+          <Zap className={clsx("w-4 h-4 md:w-5 md:h-5", demoMode && "animate-pulse")} />
+          <span className="hidden sm:inline">{demoMode ? "Demo Mode ✨" : "Try Live Demo"}</span>
+          <span className="sm:hidden">{demoMode ? "Demo ✨" : "Demo"}</span>
+        </motion.button>
       </div>
 
-      {/* Mode tabs */}
-      <div className="flex gap-1 bg-white/[0.04] rounded-lg p-1" role="tablist" aria-label="Intake input modes">
-        {(["image", "voice", "text"] as InputMode[]).map((m) => (
-          <button
-            key={m}
-            onClick={() => setMode(m)}
-            role="tab"
-            aria-selected={mode === m}
-            aria-label={`Switch to ${m} input mode`}
-            className={clsx(
-              "flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all capitalize flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70",
-              mode === m
-                ? "bg-blue-600 text-white"
-                : "text-gray-400 hover:text-gray-200",
-            )}
+      {/* Demo Mode: Show 3 demo cases with better visual hierarchy */}
+      {demoMode && demoCases.length > 0 ? (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-4"
+        >
+          <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-500/20 rounded-lg p-4">
+            <p className="text-xs text-blue-300 font-semibold uppercase tracking-widest mb-3">⚡ Select a Scenario (loads instantly)</p>
+            <p className="text-sm text-gray-300">Each demo showcases different triage levels and resource recommendations. Results appear in <span className="font-bold text-cyan-300">&lt;100ms</span>.</p>
+          </div>
+          <div className="grid gap-3 md:gap-4">
+            {demoCases.map((demo) => (
+              <motion.button
+                key={demo.id}
+                onClick={() => handleDemoSubmit(demo.id)}
+                disabled={isLoading}
+                whileHover={{ scale: 1.02, y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                className={clsx(
+                  "text-left p-4 md:p-5 rounded-xl md:rounded-2xl border-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed group min-h-[96px] md:min-h-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900",
+                  demo.triage === "critical"
+                    ? "border-red-500/50 bg-red-500/5 hover:bg-red-500/10 hover:border-red-400 hover:shadow-lg hover:shadow-red-500/20 focus-visible:ring-red-400"
+                    : demo.triage === "medium"
+                      ? "border-amber-500/50 bg-amber-500/5 hover:bg-amber-500/10 hover:border-amber-400 hover:shadow-lg hover:shadow-amber-500/20 focus-visible:ring-amber-400"
+                      : "border-green-500/50 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400 hover:shadow-lg hover:shadow-green-500/20 focus-visible:ring-green-400",
+                )}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-white group-hover:text-cyan-200 transition-colors text-base md:text-lg">{demo.title}</p>
+                    <p className="text-sm md:text-base text-gray-400 mt-1 line-clamp-2">{demo.description}</p>
+                  </div>
+                  {isLoading ? (
+                    <div className="w-5 h-5 md:w-6 md:h-6 rounded-full border-2 border-white/30 border-t-white animate-spin flex-shrink-0 mt-1" />
+                  ) : (
+                    <motion.div
+                      initial={{ opacity: 0, x: -10 }}
+                      whileHover={{ opacity: 1, x: 0 }}
+                      className="text-2xl md:text-3xl flex-shrink-0 mt-1"
+                    >
+                      ▶
+                    </motion.div>
+                  )}
+                </div>
+              </motion.button>
+            ))}
+          </div>
+          <motion.button
+            onClick={() => setDemoMode(false)}
+            whileHover={{ x: 4 }}
+            className="w-full py-2 text-sm text-gray-400 hover:text-cyan-300 transition-colors font-medium"
           >
-            {m === "image" && <Upload className="w-4 h-4" />}
-            {m === "voice" && <Mic className="w-4 h-4" />}
-            {m === "text" && <Type className="w-4 h-4" />}
-            {m}
-          </button>
-        ))}
-      </div>
+            ← Back to live intake
+          </motion.button>
+        </motion.div>
+      ) : null}
+
+      {/* Live Mode: Input modes and upload */}
+      {!demoMode && (
+        <>
+          {/* Mode tabs */}
+          <div className="flex gap-1 bg-white/[0.04] rounded-lg p-1" role="tablist" aria-label="Intake input modes">
+            {(["image", "voice", "text"] as InputMode[]).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                role="tab"
+                aria-selected={mode === m}
+                aria-label={`Switch to ${m} input mode`}
+                className={clsx(
+                  "flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all capitalize flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70",
+                  mode === m
+                    ? "bg-blue-600 text-white"
+                    : "text-gray-400 hover:text-gray-200",
+                )}
+              >
+                {m === "image" && <Upload className="w-4 h-4" />}
+                {m === "voice" && <Mic className="w-4 h-4" />}
+                {m === "text" && <Type className="w-4 h-4" />}
+                {m}
+              </button>
+            ))}
+          </div>
 
       {/* Image dropzone */}
       {mode === "image" && (
@@ -266,29 +387,31 @@ export function IntakePanel({ onSubmit, isLoading }: IntakePanelProps) {
         </label>
       )}
 
-      {/* Submit */}
-      <button
-        onClick={handleSubmit}
-        disabled={isLoading || !hasInput}
-        className={clsx(
-          "w-full py-3 px-6 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all",
-          isLoading || !hasInput
-            ? "bg-white/5 text-gray-600 cursor-not-allowed"
-            : "bg-blue-600 hover:bg-blue-500 text-white active:scale-[0.98]",
-        )}
-      >
-        {isLoading ? (
-          <>
-            <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-            Processing…
-          </>
-        ) : (
-          <>
-            <Send className="w-4 h-4" />
-            Process Intake
-          </>
-        )}
-      </button>
+          {/* Submit */}
+          <button
+            onClick={handleSubmit}
+            disabled={isLoading || !hasInput}
+            className={clsx(
+              "w-full py-3 px-6 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all",
+              isLoading || !hasInput
+                ? "bg-white/5 text-gray-600 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-500 text-white active:scale-[0.98]",
+            )}
+          >
+            {isLoading ? (
+              <>
+                <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                Processing…
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4" />
+                Process Intake
+              </>
+            )}
+          </button>
+        </>
+      )}
     </motion.div>
   );
 }

@@ -1,0 +1,56 @@
+{
+  "intake_record": {
+    "name": "Maria Santos",
+    "age": 42,
+    "gender": "Female",
+    "location_found": "Collapsed building, downtown sector 3",
+    "presenting_issues": ["crushing injury", "severe bleeding", "unconscious", "difficulty breathing"],
+    "medical_urgency": "critical",
+    "shelter_needed": true,
+    "food_needed": true,
+    "water_needed": true,
+    "medication_needed": "antibiotics, pain management",
+    "family_members": 3,
+    "special_needs": "Elderly mother (78) also injured, child (8) unaccounted for",
+    "language_preference": "Spanish",
+    "missing_information": ["exact age of child", "medications current"],
+    "extraction_confidence": "high",
+    "raw_transcription": null
+  },
+  "case_id": "case_20260514_001",
+  "action_plan": "CRITICAL TRIAGE: Immediate medical evacuation required. Patient shows signs of internal bleeding and respiratory distress. Priority 1: Transport to nearest trauma center with capability for emergency surgery. Activate family reunification protocol for missing child. Contact Spanish-language liaison for patient communication and family support. Provide pain management during transport.",
+  "resources": [
+    {
+      "type": "medical",
+      "name": "Central Hospital Trauma Center",
+      "location": "Downtown Medical District, 2km from incident",
+      "contact": "+1-555-0101",
+      "capacity": "Critical care available, orthopedic surgery on-call"
+    },
+    {
+      "type": "shelter",
+      "name": "Emergency Family Shelter - Downtown",
+      "location": "Convention Center (downtown)",
+      "contact": "+1-555-0202",
+      "capacity": "Medical-needs section available for mother"
+    },
+    {
+      "type": "family_services",
+      "name": "Child Protection & Reunification",
+      "location": "Regional Coordination Center",
+      "contact": "+1-555-0303",
+      "capacity": "Missing child protocol initiated"
+    }
+  ],
+  "evidence": [
+    {
+      "source": "Sphere Handbook - Protection",
+      "content": "In emergencies affecting families, prioritize child protection, family unity preservation, and trauma-informed care. Establish reunification protocols within first 24 hours."
+    },
+    {
+      "source": "WHO Emergency Response",
+      "content": "Patients with crushing injuries require immediate assessment for compartment syndrome, internal bleeding, and airway compromise. Evacuation to surgical capability is time-critical."
+    }
+  ],
+  "tools_used": ["search_local_resources", "create_case"]
+}

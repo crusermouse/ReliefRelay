@@ -1,0 +1,56 @@
+{
+  "intake_record": {
+    "name": "James Thompson",
+    "age": 67,
+    "gender": "Male",
+    "location_found": "Community assistance center, recovery phase",
+    "presenting_issues": ["minor cuts", "exhaustion", "anxiety", "needs basic supplies"],
+    "medical_urgency": "low",
+    "shelter_needed": false,
+    "food_needed": true,
+    "water_needed": true,
+    "medication_needed": null,
+    "family_members": 1,
+    "special_needs": "Lost all belongings in flood, needs documentation assistance",
+    "language_preference": "English",
+    "missing_information": [],
+    "extraction_confidence": "high",
+    "raw_transcription": null
+  },
+  "case_id": "case_20260514_003",
+  "action_plan": "LOW PRIORITY: Recovery phase support. Provide: 1) Basic first aid kit for minor cuts, 2) Emergency food/water supply, 3) Temporary documentation replacement assistance, 4) Referral to community mental health check-in. Individual is stable and does not require emergency intervention. Connect with NGO partner for case management in recovery phase.",
+  "resources": [
+    {
+      "type": "food",
+      "name": "Recovery Phase Food Distribution",
+      "location": "Community center, main distribution point",
+      "contact": "+1-555-0207",
+      "capacity": "Meal kits available for single-person households"
+    },
+    {
+      "type": "psychosocial",
+      "name": "Community Mental Health Support",
+      "location": "Recovery center counseling office",
+      "contact": "+1-555-0308",
+      "capacity": "Group sessions available, crisis line 24/7"
+    },
+    {
+      "type": "admin",
+      "name": "Documentation Assistance Desk",
+      "location": "Town hall recovery office",
+      "contact": "+1-555-0309",
+      "capacity": "Temporary ID and replacement document processing"
+    }
+  ],
+  "evidence": [
+    {
+      "source": "Sphere Handbook - Wash & Living Standards",
+      "content": "In recovery phases, priority shifts to restoring dignity, normalcy, and self-reliance. Individuals should transition from emergency services to sustainable community support."
+    },
+    {
+      "source": "Psychosocial Support Guidelines",
+      "content": "Disaster displacement often triggers anxiety and depression. Early integration of mental health screening prevents long-term trauma and aids recovery participation."
+    }
+  ],
+  "tools_used": ["search_local_resources", "create_case"]
+}

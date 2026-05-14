@@ -1,0 +1,28 @@
+{
+  "demos": [
+    {
+      "id": "earthquake-critical",
+      "title": "🔴 Critical: Building Collapse (Earthquake)",
+      "description": "Severe crush injury with bleeding and respiratory distress",
+      "triage": "critical",
+      "file": "earthquake-critical.json",
+      "scenario": "Urban disaster - patient requires immediate trauma surgery"
+    },
+    {
+      "id": "refugee-camp-moderate",
+      "title": "🟡 Moderate: Respiratory Illness (Refugee Camp)",
+      "description": "Fever, cough, and malnutrition in crowded displacement setting",
+      "triage": "medium",
+      "file": "refugee-camp-moderate.json",
+      "scenario": "Humanitarian setting - patient needs clinical assessment + isolation"
+    },
+    {
+      "id": "recovery-phase-low",
+      "title": "🟢 Low: Recovery Support (Community Center)",
+      "description": "Minor injuries, basic needs, psychosocial support",
+      "triage": "low",
+      "file": "recovery-phase-low.json",
+      "scenario": "Post-emergency phase - patient transitioning to recovery services"
+    }
+  ]
+}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Toaster, toast } from "react-hot-toast";
+import { Zap } from "lucide-react";
 import { IntakePanel } from "@/components/IntakePanel";
 import { TriageCard } from "@/components/TriageCard";
 import { EvidenceRail } from "@/components/EvidenceRail";
@@ -119,26 +120,60 @@ export default function Home() {
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [result, selectedCaseId]);
 
-  const handleSubmit = async (image?: File, voiceText?: string, manualText?: string) => {
-    if (!image && !voiceText && !manualText) {
-      toast.error("Please provide an image, voice note, or typed text.");
+  const handleSubmit = async (image?: File, voiceText?: string, manualText?: string, demoId?: string) => {
+    if (!image && !voiceText && !manualText && !demoId) {
+      toast.error("Please provide an image, voice note, typed text, or select a demo.");
       return;
     }
     try {
       setResult(null);
       setSelectedCase(null);
-      setLoadingStep("extracting");
-      const data = await submitIntake(image, voiceText, manualText);
+      setLoadingStep(demoId ? "done" : "extracting");
+      const data = await submitIntake(image, voiceText, manualText, demoId);
       setResult(data);
       setSelectedCaseId(data.case_id ?? null);
       setSelectedCase(data);
-      setLoadingStep("done");
+      if (demoId) {
+        // For demo, show done immediately
+        setLoadingStep("done");
+      } else {
+        setLoadingStep("done");
+      }
       await refreshCases();
       await refreshHealth();
-      toast.success(`Case ${data.case_id} created`);
+      
+      // Enhanced success toast with celebration
+      if (demoId) {
+        toast.success("⚡ Demo loaded instantly!", {
+          icon: "✨",
+          duration: 3000,
+          style: {
+            background: "#0f172a",
+            color: "#e0f2fe",
+            border: "1px solid rgba(34, 211, 238, 0.3)",
+          },
+        });
+      } else {
+        toast.success(`🎯 Case ${data.case_id} created!`, {
+          icon: "✓",
+          duration: 4000,
+          style: {
+            background: "#0f172a",
+            color: "#e0f2fe",
+            border: "1px solid rgba(34, 211, 238, 0.3)",
+          },
+        });
+      }
     } catch (err: unknown) {
       setLoadingStep("idle");
-      toast.error(err instanceof Error ? err.message : "Intake failed");
+      toast.error(err instanceof Error ? `⚠️ ${err.message}` : "⚠️ Intake failed", {
+        duration: 4000,
+        style: {
+          background: "#0f172a",
+          color: "#fecaca",
+          border: "1px solid rgba(239, 68, 68, 0.3)",
+        },
+      });
     }
   };
 
@@ -148,8 +183,33 @@ export default function Home() {
   const statusText = getStatusText(isOnline, backendReachable, health);
   const statusTone = !isOnline || !backendReachable || health?.status === "degraded" ? "amber" : "emerald";
 
+  // Keyboard shortcuts for accessibility (D = Demo, L = Live intake)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "d" || e.key === "D") {
+        e.preventDefault();
+        const intakePanel = document.querySelector('[data-intake-panel]') as HTMLElement;
+        if (intakePanel) {
+          intakePanel.scrollIntoView({ behavior: "smooth", block: "center" });
+          toast.success("🚀 Demo scenarios ready below", {
+            icon: "⌨️",
+            duration: 2500,
+            style: {
+              background: "#0f172a",
+              color: "#e0f2fe",
+              border: "1px solid rgba(34, 211, 238, 0.3)",
+            },
+          });
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   return (
-    <div className="min-h-screen text-gray-100 flex flex-col">
+    <div className="min-h-screen text-gray-100 flex flex-col relative">
       <OfflineModeOverlay isOnline={isOnline} backendReachable={backendReachable} health={health} />
 
       {/* ── HEADER ── */}
@@ -274,6 +334,25 @@ export default function Home() {
         <ImpactDashboard totalCases={cases.length} />
       </section>
 
+      {/* ── QUICK START CTA ── */}
+      <section className="px-5 md:px-8 pb-5">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          className="glass-panel rounded-2xl p-4 md:p-6 border border-emerald-500/30 bg-emerald-500/[0.05] flex items-center justify-between flex-wrap gap-4"
+        >
+          <div>
+            <h3 className="text-sm font-bold text-emerald-300 flex items-center gap-2">
+              <Zap className="w-4 h-4" />
+              Try a Live Demo
+            </h3>
+            <p className="text-xs text-emerald-100/70 mt-1">See instant <100ms response with pre-cached scenarios</p>
+          </div>
+          <span className="text-[10px] text-gray-500 font-mono">Press <kbd className="bg-white/10 border border-white/20 px-2 py-1 rounded font-mono text-xs">D</kbd> or scroll below</span>
+        </motion.div>
+      </section>
+
       {/* ── PROCESSING BANNER ── */}
       <AnimatePresence>
         {loadingBanner && (
@@ -374,9 +453,28 @@ export default function Home() {
                   transition={{ duration: 0.35 }}
                   className="space-y-4"
                 >
-                  <TriageCard result={activeResponse} />
-                  <ActionPacket result={activeResponse} />
-                  <EvidenceRail evidence={activeResponse.evidence} toolsUsed={activeResponse.tools_used} />
+                  {/* Staggered entry for result cards */}
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.05, duration: 0.3 }}
+                  >
+                    <TriageCard result={activeResponse} />
+                  </motion.div>
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.12, duration: 0.3 }}
+                  >
+                    <ActionPacket result={activeResponse} />
+                  </motion.div>
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.19, duration: 0.3 }}
+                  >
+                    <EvidenceRail evidence={activeResponse.evidence} toolsUsed={activeResponse.tools_used} />
+                  </motion.div>
                 </motion.div>
               ) : (
                 <motion.div

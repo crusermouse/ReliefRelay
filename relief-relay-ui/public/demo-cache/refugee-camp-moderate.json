@@ -1,0 +1,56 @@
+{
+  "intake_record": {
+    "name": "Ahmed Al-Hassan",
+    "age": 28,
+    "gender": "Male",
+    "location_found": "Refugee tent settlement, sector 7",
+    "presenting_issues": ["fever", "cough", "malnutrition", "dehydration"],
+    "medical_urgency": "medium",
+    "shelter_needed": true,
+    "food_needed": true,
+    "water_needed": true,
+    "medication_needed": "antimalarials, multivitamins",
+    "family_members": 4,
+    "special_needs": "Two young children (5, 7) also showing respiratory symptoms",
+    "language_preference": "Arabic",
+    "missing_information": [],
+    "extraction_confidence": "high",
+    "raw_transcription": null
+  },
+  "case_id": "case_20260514_002",
+  "action_plan": "MODERATE TRIAGE: Community health worker visit within 24 hours. Suspected respiratory infection (possibly outbreak in settlement). Priority 1: Isolate family to observation tent. Provide antimalarial course + ORS packets for dehydration. Monitor children for worsening symptoms. Priority 2: Distribute food rations (high-calorie) and ensure water access. Link to camp health clinic for follow-up in 48 hours.",
+  "resources": [
+    {
+      "type": "medical",
+      "name": "Refugee Camp Health Clinic",
+      "location": "Sector 7 central medical tent",
+      "contact": "+1-555-0104",
+      "capacity": "Community health worker available, telemedicine link to physician"
+    },
+    {
+      "type": "food",
+      "name": "Camp Food Distribution",
+      "location": "Sector 7 supply point",
+      "contact": "+1-555-0205",
+      "capacity": "High-energy rations available, cultural preferences documented"
+    },
+    {
+      "type": "water",
+      "name": "Water & Sanitation Point",
+      "location": "Sector 7, near medical tent",
+      "contact": "+1-555-0206",
+      "capacity": "Portable water filters available, 20L containers"
+    }
+  ],
+  "evidence": [
+    {
+      "source": "WHO Disease Surveillance",
+      "content": "Respiratory infections in crowded displacement settings require rapid isolation and contact tracing. Monitor for secondary cases in close quarters. ORS and nutritional support are critical for recovery."
+    },
+    {
+      "source": "Sphere Handbook - Health",
+      "content": "All affected persons have equitable access to a health service. Services shall be provided regardless of ability to pay. Preventive care is prioritized for vulnerable populations."
+    }
+  ],
+  "tools_used": ["search_local_resources", "create_case"]
+}

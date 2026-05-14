@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { FileDown, ClipboardList, CheckCircle2, Clock } from "lucide-react";
+import { FileDown, ClipboardList, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 import { getPdfUrl } from "@/lib/api";
 import type { IntakeResponse } from "@/lib/types";
 
@@ -37,9 +37,29 @@ export function ActionPacket({ result }: ActionPacketProps) {
   const packetReady = workflow_events?.some(
     (e) => e.stage === "packet-generation" && e.status !== "failed",
   );
+  
+  const hasFailedStage = workflow_events?.some((e) => e.status === "failed");
+  const usingFallback = workflow_events?.some((e) => e.status === "fallback");
 
   return (
     <div className="glass-panel rounded-2xl p-4 space-y-4">
+      {/* Degradation warning if fallback is active */}
+      {usingFallback && (
+        <motion.div
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 flex items-start gap-3"
+        >
+          <AlertTriangle className="w-4 h-4 text-amber-300 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-xs font-semibold text-amber-200">⚠️ Offline Mode Active</p>
+            <p className="text-xs text-amber-100/70 mt-1">
+              Gemma 4 is unavailable. Using cached template for action plan. Complete intake form manually if possible.
+            </p>
+          </div>
+        </motion.div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -50,16 +70,24 @@ export function ActionPacket({ result }: ActionPacketProps) {
               READY
             </span>
           )}
+          {usingFallback && (
+            <span className="text-[9px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full tracking-widest">
+              FALLBACK
+            </span>
+          )}
         </div>
         {case_id && (
-          <button
+          <motion.button
             onClick={handleDownload}
+            whileHover={{ scale: 1.05, y: -1 }}
+            whileTap={{ scale: 0.95 }}
             aria-label={`Download PDF referral packet for case ${case_id}`}
-            className="flex items-center gap-1.5 bg-blue-600/15 hover:bg-blue-600/25 active:scale-95 text-blue-300 border border-blue-500/25 text-xs px-3 py-1.5 rounded-lg transition-all duration-150 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
+            className="flex items-center justify-center md:justify-start gap-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 active:scale-95 text-white border border-blue-400/50 text-xs md:text-sm px-4 py-2.5 md:py-2 rounded-lg md:rounded-xl transition-all duration-150 font-bold shadow-lg shadow-blue-500/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 min-h-[44px] md:min-h-auto"
           >
-            <FileDown className="w-3.5 h-3.5 flex-shrink-0" />
-            Export PDF
-          </button>
+            <FileDown className="w-4 h-4 md:w-4 md:h-4 flex-shrink-0" />
+            <span className="hidden sm:inline">Export PDF</span>
+            <span className="sm:hidden">Export</span>
+          </motion.button>
         )}
       </div>
 

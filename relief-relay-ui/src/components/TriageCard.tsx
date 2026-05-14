@@ -58,9 +58,9 @@ function Field({ label, value }: { label: string; value: string | number | boole
   if (value === null || value === undefined || value === "" || value === false) return null;
   const displayValue = typeof value === "boolean" ? "Yes" : String(value);
   return (
-    <div className="flex items-start justify-between gap-3 py-1.5 border-b border-white/[0.04] last:border-0">
-      <span className="text-[11px] text-gray-500 shrink-0 leading-relaxed">{label}</span>
-      <span className="text-[11px] text-gray-200 text-right leading-relaxed capitalize">{displayValue}</span>
+    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-3 py-2 md:py-2.5 border-b border-white/[0.04] last:border-0">
+      <span className="text-[10px] md:text-[11px] text-gray-500 shrink-0 font-medium">{label}</span>
+      <span className="text-[11px] md:text-[11px] text-gray-200 text-right md:text-right leading-relaxed capitalize">{displayValue}</span>
     </div>
   );
 }
@@ -78,6 +78,14 @@ export function TriageCard({ result }: TriageCardProps) {
       transition={{ type: "spring", stiffness: 200, damping: 22 }}
       className={clsx("glass-panel border rounded-2xl p-4 space-y-4 relative overflow-hidden", styles.glow)}
     >
+      {/* Animated background pulse for critical cases */}
+      {level === "RED" && (
+        <motion.div
+          animate={{ opacity: [0.1, 0.2, 0.1] }}
+          transition={{ duration: 2, repeat: Infinity }}
+          className="absolute inset-0 bg-red-500/10 pointer-events-none"
+        />
+      )}
       {/* Ambient corner glow — CSS-driven for GPU efficiency */}
       <div
         className={clsx(

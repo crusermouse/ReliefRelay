@@ -6,7 +6,18 @@ export async function submitIntake(
   image?: File,
   voiceText?: string,
   manualText?: string,
+  demoId?: string,
 ): Promise<IntakeResponse> {
+  if (demoId) {
+    // Demo mode: call /demo-intake with demoId
+    const form = new FormData();
+    form.append("demo_id", demoId);
+    const res = await fetch(`${API}/demo-intake`, { method: "POST", body: form });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+
+  // Live mode: call /intake with image/voice/text
   const form = new FormData();
   if (image) form.append("image", image);
   if (voiceText) form.append("voice_text", voiceText);

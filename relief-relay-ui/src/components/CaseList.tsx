@@ -83,13 +83,19 @@ export function CaseList({ cases, selectedCaseId, onSelect }: CaseListProps) {
 
       <div className="flex-1 overflow-y-auto py-1">
         {cases.length === 0 ? (
-          <div className="px-4 py-10 text-center space-y-2">
-            <div className="w-8 h-8 rounded-full bg-white/[0.03] border border-white/[0.06] flex items-center justify-center mx-auto">
-              <Users className="w-4 h-4 text-gray-700" />
+          <motion.div 
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="px-4 py-8 text-center space-y-3"
+          >
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-400/20 flex items-center justify-center mx-auto">
+              <Users className="w-5 h-5 text-cyan-300/60" />
             </div>
-            <p className="text-xs text-gray-600">No cases yet</p>
-            <p className="text-[10px] text-gray-700">Submit an intake to begin</p>
-          </div>
+            <div>
+              <p className="text-xs font-semibold text-gray-300">No cases yet</p>
+              <p className="text-[11px] text-gray-500 mt-1">Try a demo scenario or submit an intake form</p>
+            </div>
+          </motion.div>
         ) : (
           <AnimatePresence initial={false}>
             {cases.map((c, idx) => {
