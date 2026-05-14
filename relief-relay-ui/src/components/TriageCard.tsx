@@ -1,31 +1,36 @@
 "use client";
 
 import clsx from "clsx";
+import { motion } from "framer-motion";
 import type { IntakeResponse, TriageLevel } from "@/lib/types";
 
 interface TriageCardProps {
   result: IntakeResponse;
 }
 
-const TRIAGE_STYLES: Record<TriageLevel, { badge: string; glow: string; label: string }> = {
+const TRIAGE_STYLES: Record<TriageLevel, { badge: string; glow: string; ring: string; label: string }> = {
   RED: {
-    badge: "bg-red-500/20 text-red-400 border border-red-500/30",
-    glow: "border-red-500/20",
+    badge: "bg-red-500/20 text-red-200 border border-red-500/40",
+    glow: "border-red-500/30 bg-red-500/[0.05]",
+    ring: "bg-red-400 shadow-red-500/60",
     label: "Critical — Immediate intervention",
   },
   ORANGE: {
-    badge: "bg-orange-500/20 text-orange-400 border border-orange-500/30",
-    glow: "border-orange-500/20",
+    badge: "bg-orange-500/20 text-orange-100 border border-orange-500/40",
+    glow: "border-orange-500/30 bg-orange-500/[0.04]",
+    ring: "bg-orange-300 shadow-orange-500/50",
     label: "High — Urgent (1-2 hours)",
   },
   YELLOW: {
-    badge: "bg-amber-500/20 text-amber-400 border border-amber-500/30",
-    glow: "border-amber-500/20",
+    badge: "bg-amber-500/20 text-amber-100 border border-amber-500/40",
+    glow: "border-amber-500/30 bg-amber-500/[0.03]",
+    ring: "bg-amber-300 shadow-amber-500/45",
     label: "Medium — Needs attention today",
   },
   GREEN: {
-    badge: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30",
-    glow: "border-emerald-500/20",
+    badge: "bg-emerald-500/20 text-emerald-100 border border-emerald-500/40",
+    glow: "border-emerald-500/30 bg-emerald-500/[0.03]",
+    ring: "bg-emerald-300 shadow-emerald-500/45",
     label: "Stable — Standard allocation",
   },
 };
@@ -62,16 +67,30 @@ export function TriageCard({ result }: TriageCardProps) {
   const styles = TRIAGE_STYLES[level];
 
   return (
-    <div className={clsx("bg-[#10141c] border rounded-xl p-4 space-y-4", styles.glow)}>
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={clsx("glass-panel border rounded-xl p-4 space-y-4 relative overflow-hidden", styles.glow)}
+    >
+      <motion.div
+        animate={{ opacity: [0.3, 0.75, 0.3], scale: [1, 1.06, 1] }}
+        transition={{ repeat: Infinity, duration: 1.9 }}
+        className={clsx("absolute -top-12 -right-12 w-28 h-28 rounded-full blur-2xl", styles.ring)}
+      />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs text-gray-500 font-mono">{case_id ?? "No case ID"}</p>
           <h3 className="text-sm font-semibold text-white mt-0.5">Intake Record</h3>
         </div>
-        <span className={clsx("text-xs font-bold px-3 py-1.5 rounded-full", styles.badge)}>
-          {level}
-        </span>
+        <div className="flex items-center gap-2">
+          <motion.span
+            animate={{ scale: [1, 1.2, 1], opacity: [0.7, 1, 0.7] }}
+            transition={{ repeat: Infinity, duration: 1.7 }}
+            className={clsx("w-2.5 h-2.5 rounded-full shadow-lg", styles.ring)}
+          />
+          <span className={clsx("text-xs font-bold px-3 py-1.5 rounded-full", styles.badge)}>{level}</span>
+        </div>
       </div>
 
       <p className="text-xs text-gray-500">{styles.label}</p>
@@ -85,7 +104,7 @@ export function TriageCard({ result }: TriageCardProps) {
       </div>
 
       {/* Fields */}
-      <div className="bg-white/[0.02] rounded-lg p-3">
+      <div className="bg-white/[0.02] rounded-lg p-3 border border-white/8">
         <Field label="Name" value={intake_record.name} />
         <Field label="Age" value={intake_record.age} />
         <Field label="Gender" value={intake_record.gender} />
@@ -127,6 +146,6 @@ export function TriageCard({ result }: TriageCardProps) {
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }

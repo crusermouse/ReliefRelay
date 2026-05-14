@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import { motion } from "framer-motion";
 import { Upload, Mic, MicOff, Type, Send, X } from "lucide-react";
 import clsx from "clsx";
 
@@ -89,11 +90,12 @@ export function IntakePanel({ onSubmit, isLoading }: IntakePanelProps) {
   const hasInput = !!image || !!voiceText || !!manualText;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto space-y-6 glass-panel rounded-2xl p-5 md:p-6">
       <div>
-        <h1 className="text-2xl font-bold text-white mb-1">Intake Processing</h1>
-        <p className="text-gray-400 text-sm">
-          Upload a form photo, record a voice note, or type notes. Gemma 4 handles the rest.
+        <p className="text-[11px] uppercase tracking-[0.17em] text-cyan-300 mb-1">Humanitarian Intake Console</p>
+        <h1 className="text-2xl font-bold text-white mb-1">Mission Intake Processing</h1>
+        <p className="text-gray-300 text-sm">
+          Upload a form photo, record a voice note, or type notes. Gemma 4 orchestrates extraction, triage, and response routing.
         </p>
       </div>
 
@@ -237,6 +239,6 @@ export function IntakePanel({ onSubmit, isLoading }: IntakePanelProps) {
           </>
         )}
       </button>
-    </div>
+    </motion.div>
   );
 }
