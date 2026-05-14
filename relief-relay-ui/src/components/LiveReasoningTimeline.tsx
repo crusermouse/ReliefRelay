@@ -1,8 +1,9 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
-import { CheckCircle2, LoaderCircle, AlertCircle } from "lucide-react";
+import { CheckCircle2, AlertCircle, Loader2, Brain, Search, Wrench, FileText, Database } from "lucide-react";
 import type { WorkflowEvent } from "@/lib/types";
 
 export type LoadingStep = "idle" | "extracting" | "retrieving" | "running_agent" | "done";
@@ -13,87 +14,153 @@ interface LiveReasoningTimelineProps {
   events: WorkflowEvent[];
 }
 
-const EVENT_LABELS: Record<string, string> = {
-  extraction: "Extraction complete",
-  retrieval: "Policy retrieval complete",
-  "tool-calling": "Tool calling complete",
-  "packet-generation": "Action packet generated",
-  persistence: "Case persisted",
+const EVENT_META: Record<string, { label: string; icon: typeof CheckCircle2; desc: string }> = {
+  extraction:         { label: "Field extraction",    icon: Brain,     desc: "Gemma 4 vision parsed the intake form" },
+  retrieval:          { label: "Policy retrieval",    icon: Search,    desc: "ChromaDB matched top-4 SOP chunks" },
+  "tool-calling":     { label: "Tool orchestration",  icon: Wrench,    desc: "Native function calling executed" },
+  "packet-generation":{ label: "Action packet",       icon: FileText,  desc: "Grounded action plan generated" },
+  persistence:        { label: "Case persisted",      icon: Database,  desc: "Record saved to local SQLite" },
 };
 
-const EVENT_ICONS: Record<string, typeof CheckCircle2> = {
-  complete: CheckCircle2,
-  fallback: AlertCircle,
-  failed: AlertCircle,
+const STATUS_STYLE = {
+  complete: { row: "border-emerald-400/25 bg-emerald-500/[0.06]", icon: "text-emerald-300", text: "text-emerald-200", dot: "bg-emerald-400" },
+  fallback:  { row: "border-amber-400/30 bg-amber-500/[0.07]",    icon: "text-amber-300",   text: "text-amber-100",  dot: "bg-amber-400"   },
+  failed:    { row: "border-rose-400/30 bg-rose-500/[0.07]",      icon: "text-rose-300",    text: "text-rose-100",   dot: "bg-rose-400"    },
+  active:    { row: "border-cyan-400/30 bg-cyan-500/[0.07]",      icon: "text-cyan-300",    text: "text-cyan-100",   dot: "bg-cyan-400"    },
+  idle:      { row: "border-white/[0.06] bg-white/[0.02]",        icon: "text-gray-600",    text: "text-gray-500",   dot: "bg-gray-700"    },
 };
 
-function formatEventLabel(event: WorkflowEvent) {
-  return EVENT_LABELS[event.stage] ?? event.stage.replace(/-/g, " ");
+// Pre-flight stages shown while loading before backend responds
+const PREFLIGHT = [
+  { stage: "upload",    label: "Intake accepted",          icon: Database },
+  { stage: "sending",   label: "Routing to Gemma 4…",      icon: Brain    },
+  { stage: "rag",       label: "Loading retrieval index…", icon: Search   },
+];
+
+function PreflightRow({ stage, label, Icon, idx }: { stage: string; label: string; Icon: typeof Brain; idx: number }) {
+  return (
+    <motion.div
+      key={stage}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: idx * 0.18, duration: 0.3 }}
+      className="flex items-center gap-3 rounded-lg border border-cyan-400/20 bg-cyan-500/[0.05] px-3 py-2.5"
+    >
+      <div className="relative flex-shrink-0">
+        <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+      </div>
+      <Icon className="w-3.5 h-3.5 text-cyan-400/60 flex-shrink-0" />
+      <span className="text-xs font-mono text-cyan-200">{label}</span>
+      <Loader2 className="w-3 h-3 text-cyan-400/50 animate-spin ml-auto flex-shrink-0" />
+    </motion.div>
+  );
 }
 
 export function LiveReasoningTimeline({ loadingStep, isLoading, events }: LiveReasoningTimelineProps) {
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [events.length]);
+
+  const showPreflight = isLoading && events.length === 0;
+
   return (
-    <section className="glass-panel terminal-grid rounded-2xl p-4 md:p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-white">Live AI Reasoning Timeline</h3>
-        <span className="text-[10px] md:text-xs font-mono text-cyan-300">
-          {isLoading ? "PROCESSING · REAL STATES" : "READY · LOCAL INFERENCE"}
-        </span>
-      </div>
+    <section className="glass-panel terminal-grid rounded-2xl p-4 md:p-5 relative overflow-hidden">
+      {/* Scan line for cinematic feel */}
+      {isLoading && <div className="scan-line absolute inset-0 pointer-events-none rounded-2xl" />}
 
-      {events.length === 0 && isLoading ? (
-        <div className="rounded-lg border border-cyan-400/20 bg-cyan-500/10 px-3 py-3 flex items-center gap-3">
-          <LoaderCircle className="w-4 h-4 animate-spin text-cyan-300" />
-          <span className="text-xs md:text-sm font-mono text-cyan-100">Waiting for backend response…</span>
+      <div className="flex items-center justify-between mb-4 relative z-10">
+        <div className="flex items-center gap-2">
+          <Brain className="w-4 h-4 text-cyan-400" />
+          <h3 className="text-sm font-semibold text-white">Live AI Reasoning</h3>
         </div>
-      ) : (
-        <div className="space-y-2.5">
-          {events.map((event, idx) => {
-            const done = event.status === "complete";
-            const active = isLoading && idx === events.length - 1 && event.status !== "failed";
-            const Icon = EVENT_ICONS[event.status] ?? CheckCircle2;
-            return (
-              <motion.div
-                key={`${event.stage}-${idx}`}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.25, delay: idx * 0.04 }}
-                className={clsx(
-                  "flex items-center gap-3 rounded-lg border px-3 py-2",
-                  done
-                    ? "border-emerald-400/30 bg-emerald-500/8"
-                    : event.status === "fallback"
-                      ? "border-amber-400/35 bg-amber-500/10"
-                      : event.status === "failed"
-                        ? "border-rose-400/35 bg-rose-500/10"
-                        : active
-                          ? "border-cyan-400/35 bg-cyan-500/10"
-                          : "border-white/7 bg-white/[0.02]",
-                )}
-              >
-                <span
-                  className={clsx(
-                    "w-4 h-4 rounded-full grid place-items-center",
-                    done ? "text-emerald-300" : event.status === "fallback" ? "text-amber-300" : event.status === "failed" ? "text-rose-300" : active ? "text-cyan-300" : "text-gray-500",
-                  )}
-                >
-                  <Icon className={clsx("w-4 h-4", active && "animate-spin")} />
-                </span>
-                <span className={clsx("text-xs md:text-sm font-mono", done ? "text-emerald-200" : event.status === "fallback" ? "text-amber-100" : event.status === "failed" ? "text-rose-100" : active ? "text-cyan-100 text-glow" : "text-gray-400")}>
-                  {formatEventLabel(event)}
-                </span>
-              </motion.div>
-            );
-          })}
-
-          {loadingStep !== "done" && events.length > 0 && isLoading && (
-            <div className="rounded-lg border border-cyan-400/20 bg-cyan-500/10 px-3 py-3 flex items-center gap-3">
-              <LoaderCircle className="w-4 h-4 animate-spin text-cyan-300" />
-              <span className="text-xs md:text-sm font-mono text-cyan-100">Awaiting final backend confirmation…</span>
-            </div>
+        <div className="flex items-center gap-2">
+          {isLoading && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex items-center gap-1.5 bg-cyan-500/10 border border-cyan-400/20 rounded-full px-2.5 py-1"
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+              <span className="text-[9px] font-mono text-cyan-300 tracking-widest">PROCESSING</span>
+            </motion.div>
+          )}
+          {!isLoading && (
+            <span className="text-[9px] md:text-[10px] font-mono text-gray-600 tracking-widest">
+              {events.length > 0 ? "COMPLETE · LOCAL INFERENCE" : "READY · LOCAL INFERENCE"}
+            </span>
           )}
         </div>
-      )}
+      </div>
+
+      <div className="space-y-2 relative z-10">
+        <AnimatePresence initial={false}>
+          {showPreflight ? (
+            PREFLIGHT.map((p, idx) => (
+              <PreflightRow key={p.stage} stage={p.stage} label={p.label} Icon={p.icon} idx={idx} />
+            ))
+          ) : (
+            events.map((event, idx) => {
+              const isActive = isLoading && idx === events.length - 1 && event.status !== "failed";
+              const statusKey = isActive ? "active" : (event.status as keyof typeof STATUS_STYLE) ?? "idle";
+              const style = STATUS_STYLE[statusKey] ?? STATUS_STYLE.idle;
+              const meta = EVENT_META[event.stage];
+              const Icon = isActive ? Loader2 : event.status === "complete" ? CheckCircle2 : AlertCircle;
+
+              return (
+                <motion.div
+                  key={`${event.stage}-${idx}`}
+                  initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ duration: 0.28, delay: Math.min(idx * 0.05, 0.25) }}
+                  className={clsx("flex items-center gap-3 rounded-lg border px-3 py-2.5", style.row)}
+                >
+                  {/* Status dot */}
+                  <div className="relative flex-shrink-0">
+                    <div className={clsx("w-1.5 h-1.5 rounded-full", style.dot)} />
+                    {isActive && (
+                      <div className={clsx("absolute inset-0 rounded-full animate-ping opacity-60", style.dot)} />
+                    )}
+                  </div>
+
+                  <Icon className={clsx("w-3.5 h-3.5 flex-shrink-0", style.icon, isActive && "animate-spin")} />
+
+                  <div className="flex-1 min-w-0">
+                    <span className={clsx("text-xs font-mono", style.text)}>
+                      {meta?.label ?? event.stage.replace(/-/g, " ")}
+                    </span>
+                    {meta?.desc && !isActive && (
+                      <p className="text-[10px] text-gray-600 mt-0.5 truncate">{meta.desc}</p>
+                    )}
+                  </div>
+
+                  {event.status === "complete" && (
+                    <span className="text-[9px] font-mono text-emerald-600 flex-shrink-0">DONE</span>
+                  )}
+                  {event.status === "fallback" && (
+                    <span className="text-[9px] font-mono text-amber-600 flex-shrink-0">FALLBACK</span>
+                  )}
+                </motion.div>
+              );
+            })
+          )}
+
+          {/* Awaiting confirmation row */}
+          {isLoading && events.length > 0 && loadingStep !== "done" && (
+            <motion.div
+              key="awaiting"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-3 rounded-lg border border-cyan-400/15 bg-cyan-500/[0.04] px-3 py-2"
+            >
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400/60 flex-shrink-0" />
+              <span className="text-xs font-mono text-cyan-400/60">Awaiting backend confirmation…</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <div ref={bottomRef} />
+      </div>
     </section>
   );
 }
