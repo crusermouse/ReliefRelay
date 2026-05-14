@@ -1,5 +1,6 @@
 import json
 import re
+import html
 from pathlib import Path
 from datetime import datetime
 from reportlab.lib.pagesizes import A4
@@ -14,6 +15,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Allowed case ID format: CASE- followed by 6 uppercase hex characters
 _CASE_ID_RE = re.compile(r"^CASE-[0-9A-F]{6}$")
+_INVALID_TEXT_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
 
 
 def _validate_case_id(case_id: str) -> str:
@@ -21,6 +23,24 @@ def _validate_case_id(case_id: str) -> str:
     if not _CASE_ID_RE.match(case_id):
         raise ValueError(f"Invalid case_id format: {case_id!r}")
     return case_id
+
+
+def _safe_text(value, default: str = "") -> str:
+    """Convert arbitrary values to safe plain text for ReportLab Paragraph."""
+    if value is None:
+        raw = default
+    elif isinstance(value, (list, tuple, set)):
+        raw = ", ".join(str(v) for v in value if v is not None)
+    elif isinstance(value, dict):
+        raw = json.dumps(value, ensure_ascii=False)
+    else:
+        raw = str(value)
+
+    if not raw.strip():
+        raw = default
+
+    raw = _INVALID_TEXT_RE.sub(" ", raw)
+    return html.escape(raw, quote=True)
 
 TRIAGE_COLORS = {
     "RED": colors.HexColor("#ef4444"),
@@ -51,7 +71,8 @@ def generate_pdf(case_id: str) -> str:
     story = []
 
     # ── Header ────────────────────────────────────────────────────────
-    triage_level = case.get("triage_level", "GREEN")
+    triage_level = str(case.get("triage_level", "GREEN")).upper()
+    triage_level_text = _safe_text(triage_level, "GREEN")
     triage_color = TRIAGE_COLORS.get(triage_level, colors.green)
 
     title_style = ParagraphStyle(
@@ -69,8 +90,8 @@ def generate_pdf(case_id: str) -> str:
         fontName="Helvetica-Bold",
         textColor=triage_color,
     )
-    story.append(Paragraph(f"TRIAGE LEVEL: {triage_level}", triage_style))
-    story.append(Paragraph(f"Case ID: {case_id}", styles["Normal"]))
+    story.append(Paragraph(f"TRIAGE LEVEL: {triage_level_text}", triage_style))
+    story.append(Paragraph(f"Case ID: {_safe_text(case_id)}", styles["Normal"]))
     story.append(Paragraph(
         f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
         styles["Normal"],
@@ -82,25 +103,27 @@ def generate_pdf(case_id: str) -> str:
     intake = case.get("intake_data", {})
     story.append(Paragraph("Intake Information", styles["Heading2"]))
 
+    medical_urgency = str(intake.get("medical_urgency", "none")).upper()
+
     table_data = [
         ["Field", "Value"],
-        ["Name", intake.get("name") or "Unknown"],
-        ["Age", str(intake.get("age") or "Unknown")],
-        ["Gender", intake.get("gender") or "Unknown"],
-        ["Location Found", intake.get("location_found") or "Unknown"],
-        ["Medical Urgency", intake.get("medical_urgency", "none").upper()],
-        ["Family Members", str(intake.get("family_members", 1))],
-        ["Language", intake.get("language_preference", "English")],
+        ["Name", _safe_text(intake.get("name"), "Unknown")],
+        ["Age", _safe_text(intake.get("age"), "Unknown")],
+        ["Gender", _safe_text(intake.get("gender"), "Unknown")],
+        ["Location Found", _safe_text(intake.get("location_found"), "Unknown")],
+        ["Medical Urgency", _safe_text(medical_urgency, "NONE")],
+        ["Family Members", _safe_text(intake.get("family_members", 1), "1")],
+        ["Language", _safe_text(intake.get("language_preference", "English"), "English")],
         ["Shelter Needed", "Yes" if intake.get("shelter_needed") else "No"],
         ["Food Needed", "Yes" if intake.get("food_needed") else "No"],
         ["Water Needed", "Yes" if intake.get("water_needed") else "No"],
-        ["Medication", intake.get("medication_needed") or "None"],
-        ["Special Needs", intake.get("special_needs") or "None"],
+        ["Medication", _safe_text(intake.get("medication_needed"), "None")],
+        ["Special Needs", _safe_text(intake.get("special_needs"), "None")],
     ]
 
     issues = intake.get("presenting_issues", [])
     if issues:
-        table_data.append(["Presenting Issues", ", ".join(issues)])
+        table_data.append(["Presenting Issues", _safe_text(issues, "None")])
 
     t = Table(table_data, colWidths=[5 * cm, 12 * cm])
     t.setStyle(TableStyle([
@@ -125,9 +148,9 @@ def generate_pdf(case_id: str) -> str:
         story.append(Paragraph("Action Plan", styles["Heading2"]))
         story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#e2e8f0")))
         story.append(Spacer(1, 0.2 * cm))
-        for line in action_plan.split("\n"):
+        for line in str(action_plan).splitlines():
             if line.strip():
-                story.append(Paragraph(line, styles["Normal"]))
+                story.append(Paragraph(_safe_text(line), styles["Normal"]))
                 story.append(Spacer(1, 0.1 * cm))
         story.append(Spacer(1, 0.5 * cm))
 
@@ -136,7 +159,9 @@ def generate_pdf(case_id: str) -> str:
     if missing:
         story.append(Paragraph("Missing Information — Ask Next", styles["Heading2"]))
         for item in missing:
-            story.append(Paragraph(f"• {item}", styles["Normal"]))
+            item_text = _safe_text(item)
+            if item_text.strip():
+                story.append(Paragraph(f"• {item_text}", styles["Normal"]))
         story.append(Spacer(1, 0.5 * cm))
 
     # ── Footer ────────────────────────────────────────────────────────
