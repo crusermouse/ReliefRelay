@@ -347,7 +347,7 @@ export default function Home() {
               <Zap className="w-4 h-4" />
               Try a Live Demo
             </h3>
-            <p className="text-xs text-emerald-100/70 mt-1">See instant <100ms response with pre-cached scenarios</p>
+            <p className="text-xs text-emerald-100/70 mt-1">See instant {"<100ms"} response with pre-cached scenarios</p>
           </div>
           <span className="text-[10px] text-gray-500 font-mono">Press <kbd className="bg-white/10 border border-white/20 px-2 py-1 rounded font-mono text-xs">D</kbd> or scroll below</span>
         </motion.div>
