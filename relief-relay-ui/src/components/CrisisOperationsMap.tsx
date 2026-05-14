@@ -224,7 +224,7 @@ export function CrisisOperationsMap({ cases = [] }: CrisisOperationsMapProps) {
                   </p>
                 </div>
               </InfoWindow>
-            ))}
+            )}
           </GoogleMap>
         )}
 
