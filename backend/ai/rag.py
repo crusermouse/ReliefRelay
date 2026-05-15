@@ -91,35 +91,3 @@ def retrieve(
         return []
 
 
-# -- GROUNDED GENERATION ------------------------------------------------
-def generate_grounded_plan(
-    intake_record: dict,
-    retrieved_docs: list[dict],
-    gemma_fn,  # Pass in chat_text function
-) -> str:
-    """
-    Given an extracted intake record and retrieved policy chunks,
-    ask Gemma 4 to generate an action plan grounded in the documents.
-    """
-    context = "\n\n".join([
-        f"[{doc['source']}]\n{doc['content']}"
-        for doc in retrieved_docs
-    ])
-    prompt = f"""You are a disaster relief case manager.
-
-INTAKE RECORD:
-{intake_record}
-
-RELEVANT RELIEF POLICIES AND STANDARDS:
-{context}
-
-Based ONLY on the intake record and the above policy documents, generate:
-1. TRIAGE SUMMARY: 2-3 sentences describing the person's situation
-2. IMMEDIATE ACTIONS: Numbered list of next steps (max 5)
-3. RESOURCE NEEDS: Specific resources required
-4. MISSING INFO: What the volunteer should ask next
-5. ESCALATION: Whether this case needs supervisor review (YES/NO + reason)
-6. POLICY CITATIONS: Which document sections justify your triage decision
-
-Be specific, brief, and actionable. Real lives depend on this being clear."""
-    return gemma_fn(prompt)
