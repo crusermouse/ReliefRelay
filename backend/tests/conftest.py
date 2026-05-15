@@ -1,60 +1,60 @@
 import sys
 from unittest.mock import MagicMock
+
+# Mock required dependencies before any backend imports
+for module in ["pydantic_settings", "fastapi", "ollama", "chromadb"]:
+    if module not in sys.modules:
+        sys.modules[module] = MagicMock()
+
 import pytest
+import sqlite3
 
-# Mock early before pytest imports test files
-mock_pydantic_settings = MagicMock()
-mock_ollama = MagicMock()
-mock_reportlab = MagicMock()
-mock_chromadb = MagicMock()
-mock_httpx = MagicMock()
+@pytest.fixture(autouse=True)
+def fresh_db(monkeypatch):
+    import sqlite3
+    from tools import case_manager
 
-class ConnectError(Exception): pass
-class TimeoutException(Exception): pass
-class HTTPStatusError(Exception): pass
-class Request:
-    def __init__(self, method, url):
-        self.method = method
-        self.url = url
-class Response:
-    def __init__(self, status_code, request=None):
-        self.status_code = status_code
-        self.request = request
+    # Do not mock settings.CASES_DB to prevent SQLite from creating on-disk files
+    # under MagicMock string representations. Instead, we completely intercept the connection creation.
 
-mock_httpx.ConnectError = ConnectError
-mock_httpx.TimeoutException = TimeoutException
-mock_httpx.HTTPStatusError = HTTPStatusError
-mock_httpx.Request = Request
-mock_httpx.Response = Response
+    # Create an in-memory database that stays open for the duration of the test
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
 
-sys.modules["pydantic_settings"] = mock_pydantic_settings
-sys.modules["ollama"] = mock_ollama
-sys.modules["reportlab"] = mock_reportlab
-sys.modules["reportlab.pdfgen"] = MagicMock()
-sys.modules["reportlab.lib"] = MagicMock()
-sys.modules["reportlab.lib.pagesizes"] = MagicMock()
-sys.modules["reportlab.pdfbase"] = MagicMock()
-sys.modules["reportlab.pdfbase.ttfonts"] = MagicMock()
-sys.modules["chromadb"] = mock_chromadb
-sys.modules["httpx"] = mock_httpx
+    # Since the codebase calls conn.close(), we must provide a dummy connection
+    # wrapper that ignores close().
 
-# Mock the settings object explicitly
-class MockSettings:
-    OLLAMA_BASE_URL = "http://localhost:11434"
-    GEMMA_MODEL = "gemma2"
-    GEMMA_MAX_CONCURRENCY = 1
-    GEMMA_STREAMING = False
-    GEMMA_DETERMINISTIC = True
-    GEMMA_REQUEST_TIMEOUT = 30
-    GEMMA_MAX_TOKENS = 1000
-    GEMMA_WARMUP_PROMPT = "hello"
-    GEMMA_WARMUP_TIMEOUT = 5
+    class DummyConnection:
+        def __init__(self, real_conn):
+            self.real_conn = real_conn
 
-mock_config = MagicMock()
-mock_config.settings = MockSettings()
-sys.modules["config"] = mock_config
+        def execute(self, *args, **kwargs):
+            return self.real_conn.execute(*args, **kwargs)
 
-@pytest.fixture(scope="session", autouse=True)
-def mock_dependencies():
-    """Mock heavy or unavailable dependencies for testing."""
+        def commit(self):
+            self.real_conn.commit()
+
+        def close(self):
+            # Do nothing so the connection stays alive for other queries in the test
+            pass
+
+        @property
+        def row_factory(self):
+            return self.real_conn.row_factory
+
+        @row_factory.setter
+        def row_factory(self, value):
+            self.real_conn.row_factory = value
+
+    def _mock_get_conn():
+        return DummyConnection(conn)
+
+    monkeypatch.setattr(case_manager, "_get_conn", _mock_get_conn)
+
+    # Initialize the tables for the fresh DB
+    case_manager._init_db()
+
     yield
+
+    # Properly close the real connection after the test
+    conn.close()

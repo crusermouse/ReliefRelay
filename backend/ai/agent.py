@@ -76,23 +76,21 @@ def _safe_tool_args(tool_args: Any) -> dict[str, Any]:
 
 
 def _resource_types_for_case(intake_record: dict, triage_level: str) -> list[str]:
-    needed: set[str] = set()
+    needed: list[str] = []
     if intake_record.get("shelter_needed"):
-        needed.add("shelter")
+        needed.append("shelter")
     if intake_record.get("food_needed"):
-        needed.add("food")
+        needed.append("food")
     if intake_record.get("water_needed"):
-        needed.add("transport")
+        needed.append("transport")
     if str(intake_record.get("medical_urgency", "none")).lower() in {"medium", "high", "critical"}:
-        needed.add("medical")
+        needed.append("medical")
     if triage_level in {"RED", "ORANGE"}:
-        needed.add("escalation")
+        needed.append("escalation")
 
     ordered: list[str] = []
     for resource_type in RESOURCE_PRIORITY:
-        # No duplicate check needed: RESOURCE_PRIORITY contains unique values
-        # and is iterated exactly once, so ordered is guaranteed unique.
-        if resource_type in needed:
+        if resource_type in needed and resource_type not in ordered:
             ordered.append(resource_type)
     return ordered
 
