@@ -1,173 +1,198 @@
-"use client";
-
-import clsx from "clsx";
-import { motion, useReducedMotion } from "framer-motion";
-import { AlertTriangle } from "lucide-react";
-import type { IntakeResponse, TriageLevel } from "@/lib/types";
+import { motion } from "framer-motion";
+import { Home, UtensilsCrossed, Droplets, Pill, AlertTriangle } from "lucide-react";
+import type { IntakeRecord } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 interface TriageCardProps {
-  result: IntakeResponse;
+  record: IntakeRecord;
 }
 
-const TRIAGE_STYLES: Record<TriageLevel, { badge: string; glow: string; ring: string; label: string; pulseBg: string }> = {
-  RED: {
-    badge: "bg-red-500/20 text-red-200 border border-red-500/40",
-    glow: "border-red-500/25 bg-red-500/[0.04]",
-    ring: "bg-red-400/40",
-    pulseBg: "bg-red-400",
-    label: "Critical — Immediate intervention required",
-  },
-  ORANGE: {
-    badge: "bg-orange-500/20 text-orange-100 border border-orange-500/40",
-    glow: "border-orange-500/25 bg-orange-500/[0.03]",
-    ring: "bg-orange-300/35",
-    pulseBg: "bg-orange-400",
-    label: "High — Urgent response within 1–2 hours",
+const TRIAGE_STYLES = {
+  GREEN: {
+    color: "var(--triage-green)",
+    bg: "var(--triage-green-bg)",
+    border: "var(--triage-green-border)",
+    label: "ROUTINE",
+    subtext: "Standard processing queue"
   },
   YELLOW: {
-    badge: "bg-amber-500/20 text-amber-100 border border-amber-500/40",
-    glow: "border-amber-500/25 bg-amber-500/[0.03]",
-    ring: "bg-amber-300/30",
-    pulseBg: "bg-amber-400",
-    label: "Medium — Needs attention today",
+    color: "var(--triage-yellow)",
+    bg: "var(--triage-yellow-bg)",
+    border: "var(--triage-yellow-border)",
+    label: "URGENT",
+    subtext: "Attend within 4 hours"
   },
-  GREEN: {
-    badge: "bg-emerald-500/20 text-emerald-100 border border-emerald-500/40",
-    glow: "border-emerald-500/25 bg-emerald-500/[0.03]",
-    ring: "bg-emerald-300/25",
-    pulseBg: "bg-emerald-400",
-    label: "Stable — Standard allocation",
+  ORANGE: {
+    color: "var(--triage-orange)",
+    bg: "var(--triage-orange-bg)",
+    border: "var(--triage-orange-border)",
+    label: "EMERGENT",
+    subtext: "Attend within 60 minutes"
   },
+  RED: {
+    color: "var(--triage-red)",
+    bg: "var(--triage-red-bg)",
+    border: "var(--triage-red-border)",
+    label: "CRITICAL",
+    subtext: "Immediate attention required"
+  }
 };
 
-const CONFIDENCE_STYLES: Record<string, string> = {
-  high:   "text-emerald-400",
-  medium: "text-amber-400",
-  low:    "text-rose-400",
+const CONFIDENCE_LEVELS = {
+  low: { width: "33%", color: "bg-triage-red", label: "Low confidence" },
+  medium: { width: "66%", color: "bg-triage-yellow", label: "Medium confidence" },
+  high: { width: "100%", color: "bg-triage-green", label: "High confidence" }
 };
 
-const URGENCY_MAP: Record<string, TriageLevel> = {
-  critical: "RED",
-  high:     "ORANGE",
-  medium:   "YELLOW",
-  low:      "GREEN",
-  none:     "GREEN",
-};
-
-function Field({ label, value }: { label: string; value: string | number | boolean | null | undefined }) {
-  if (value === null || value === undefined || value === "" || value === false) return null;
-  const displayValue = typeof value === "boolean" ? "Yes" : String(value);
-  return (
-    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-3 py-2 md:py-2.5 border-b border-white/[0.04] last:border-0">
-      <span className="text-[10px] md:text-[11px] text-gray-500 shrink-0 font-medium">{label}</span>
-      <span className="text-[11px] md:text-[11px] text-gray-200 text-right md:text-right leading-relaxed capitalize">{displayValue}</span>
-    </div>
-  );
+function getTriageLevel(urgency: string): keyof typeof TRIAGE_STYLES {
+  switch (urgency) {
+    case "critical": return "RED";
+    case "high": return "ORANGE";
+    case "medium": return "YELLOW";
+    case "low":
+    case "none":
+    default:
+      return "GREEN";
+  }
 }
 
-export function TriageCard({ result }: TriageCardProps) {
-  const reduceMotion = useReducedMotion();
-  const { intake_record, case_id } = result;
-  const level: TriageLevel = URGENCY_MAP[intake_record.medical_urgency] ?? "GREEN";
-  const styles = TRIAGE_STYLES[level];
+export function TriageCard({ record }: TriageCardProps) {
+  const level = getTriageLevel(record.medical_urgency);
+  const style = TRIAGE_STYLES[level];
+  const conf = CONFIDENCE_LEVELS[record.extraction_confidence || "medium"];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ type: "spring", stiffness: 200, damping: 22 }}
-      className={clsx("glass-panel border rounded-2xl p-4 space-y-4 relative overflow-hidden", styles.glow)}
-    >
-      {/* Animated background pulse for critical cases */}
-      {level === "RED" && (
-        <motion.div
-          animate={{ opacity: [0.1, 0.2, 0.1] }}
-          transition={{ duration: 2, repeat: Infinity }}
-          className="absolute inset-0 bg-red-500/10 pointer-events-none"
-        />
-      )}
-      {/* Ambient corner glow — CSS-driven for GPU efficiency */}
-      <div
-        className={clsx(
-          "absolute -top-10 -right-10 w-32 h-32 rounded-full blur-3xl pointer-events-none",
-          styles.ring,
-          !reduceMotion && "ambient-pulse",
-        )}
-      />
+    <div className="bg-bg-secondary border border-border rounded-[16px] overflow-hidden">
 
-      {/* Header */}
-      <div className="flex items-center justify-between relative z-10">
-        <div>
-          <p className="text-[10px] text-gray-600 font-mono tracking-wider">{case_id ?? "—"}</p>
-          <h3 className="text-sm font-semibold text-white mt-0.5">Intake Record</h3>
+      {/* TOP TRIAGE BAR */}
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="h-[44px] flex items-center px-[16px] gap-[12px]"
+        style={{
+          backgroundColor: style.bg,
+          borderLeft: `4px solid ${style.color}`,
+          borderBottom: "1px solid var(--border)"
+        }}
+      >
+        <div className="relative flex h-3 w-3 items-center justify-center">
+          {level === "RED" && (
+            <span
+              className="absolute inline-flex h-full w-full rounded-full opacity-75 animate-[pulse_2s_ease-out_infinite]"
+              style={{ backgroundColor: style.color }}
+            />
+          )}
+          <span
+            className="relative inline-flex rounded-full h-2 w-2"
+            style={{ backgroundColor: style.color }}
+          />
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative flex-shrink-0">
-            <span className={clsx("block w-2.5 h-2.5 rounded-full", styles.pulseBg)} />
-            {!reduceMotion && level === "RED" && (
-              <span className={clsx("absolute inset-0 rounded-full animate-ping opacity-75", styles.pulseBg)} />
+        <span className="font-semibold text-[13px] tracking-wider text-text-primary" style={{ color: style.color }}>
+          {style.label}
+        </span>
+        <span className="text-[13px] text-text-secondary hidden sm:inline-block">— {style.subtext}</span>
+      </motion.div>
+
+      <div className="p-[16px] md:p-[24px] flex flex-col gap-[20px]">
+
+        {/* NAME ROW */}
+        <div className="flex flex-col gap-[4px]">
+          <h3 className="text-[18px] font-semibold text-text-primary">
+            {record.name || "Unknown Individual"}
+          </h3>
+          <div className="flex flex-wrap items-center gap-x-[12px] gap-y-[4px] text-[15px] text-text-secondary">
+            {record.age ? <span>{record.age} yrs</span> : <span>Age unknown</span>}
+            <span className="opacity-50">·</span>
+            <span>{record.gender || "Gender unspec."}</span>
+            {record.location_found && (
+              <>
+                <span className="opacity-50">·</span>
+                <span>Found: {record.location_found}</span>
+              </>
             )}
           </div>
-          <span className={clsx("text-xs font-bold px-3 py-1.5 rounded-full", styles.badge)}>{level}</span>
-        </div>
-      </div>
-
-      <p className="text-[11px] text-gray-500 relative z-10">{styles.label}</p>
-
-      {/* Confidence */}
-      <div className="flex items-center gap-2 relative z-10">
-        <span className="text-[11px] text-gray-600">Extraction confidence:</span>
-        <span className={clsx("text-[11px] font-semibold capitalize", CONFIDENCE_STYLES[intake_record.extraction_confidence] ?? "text-gray-500")}>
-          {intake_record.extraction_confidence}
-        </span>
-      </div>
-
-      {/* Fields */}
-      <div className="bg-white/[0.02] rounded-xl p-3 border border-white/[0.06] space-y-0 relative z-10">
-        <Field label="Name" value={intake_record.name} />
-        <Field label="Age" value={intake_record.age} />
-        <Field label="Gender" value={intake_record.gender} />
-        <Field label="Location" value={intake_record.location_found} />
-        <Field label="Medical urgency" value={intake_record.medical_urgency} />
-        <Field label="Family members" value={intake_record.family_members > 0 ? intake_record.family_members : undefined} />
-        <Field label="Language" value={intake_record.language_preference !== "English" ? intake_record.language_preference : undefined} />
-        <Field label="Shelter needed" value={intake_record.shelter_needed} />
-        <Field label="Food needed" value={intake_record.food_needed} />
-        <Field label="Water needed" value={intake_record.water_needed} />
-        <Field label="Medication" value={intake_record.medication_needed} />
-        <Field label="Special needs" value={intake_record.special_needs} />
-      </div>
-
-      {/* Presenting issues */}
-      {intake_record.presenting_issues.length > 0 && (
-        <div className="relative z-10">
-          <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">Presenting Issues</p>
-          <div className="flex flex-wrap gap-1.5">
-            {intake_record.presenting_issues.map((issue, i) => (
-              <span key={i} className="text-[11px] bg-white/[0.04] text-gray-300 border border-white/[0.07] px-2 py-1 rounded-md leading-tight">
-                {issue}
-              </span>
-            ))}
+          <div className="flex flex-wrap items-center gap-[8px] mt-[8px]">
+            <span className="bg-bg-surface border border-border px-[8px] py-[2px] rounded-[6px] text-[12px] font-medium text-text-primary">
+              Family of {record.family_members || 1}
+            </span>
+            <span className="bg-bg-surface border border-border px-[8px] py-[2px] rounded-[6px] text-[12px] font-medium text-text-primary">
+              {record.language_preference || "English"}
+            </span>
           </div>
         </div>
-      )}
 
-      {/* Missing info */}
-      {intake_record.missing_information.length > 0 && (
-        <div className="relative z-10">
-          <div className="flex items-center gap-1.5 mb-2">
-            <AlertTriangle className="w-3 h-3 text-amber-400 flex-shrink-0" />
-            <p className="text-[10px] text-amber-400 uppercase tracking-widest">Missing Information</p>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {intake_record.missing_information.map((item, i) => (
-              <span key={i} className="text-[11px] bg-amber-500/[0.08] text-amber-400 border border-amber-500/20 px-2 py-1 rounded-md leading-tight">
-                {item}
-              </span>
-            ))}
+        {/* NEEDS */}
+        <div className="flex flex-col gap-[12px] border-t border-border pt-[20px]">
+          <h4 className="text-[13px] font-semibold text-text-muted uppercase tracking-[0.08em]">Needs</h4>
+          <div className="flex flex-wrap gap-[8px]">
+            {record.shelter_needed && (
+              <div className="flex items-center gap-[6px] bg-bg-surface border border-border px-[12px] py-[6px] rounded-[6px]">
+                <Home size={14} className="text-text-secondary" />
+                <span className="text-[13px] font-medium text-text-primary">Shelter</span>
+              </div>
+            )}
+            {record.food_needed && (
+              <div className="flex items-center gap-[6px] bg-bg-surface border border-border px-[12px] py-[6px] rounded-[6px]">
+                <UtensilsCrossed size={14} className="text-text-secondary" />
+                <span className="text-[13px] font-medium text-text-primary">Food</span>
+              </div>
+            )}
+            {record.water_needed && (
+              <div className="flex items-center gap-[6px] bg-bg-surface border border-border px-[12px] py-[6px] rounded-[6px]">
+                <Droplets size={14} className="text-text-secondary" />
+                <span className="text-[13px] font-medium text-text-primary">Water</span>
+              </div>
+            )}
+            {record.medication_needed && record.medication_needed.toLowerCase() !== "none" && (
+              <div className="flex flex-col bg-bg-surface border border-border px-[12px] py-[6px] rounded-[6px]">
+                <div className="flex items-center gap-[6px]">
+                  <Pill size={14} className="text-text-secondary" />
+                  <span className="text-[13px] font-medium text-text-primary">Medication</span>
+                </div>
+                {typeof record.medication_needed === "string" && record.medication_needed.toLowerCase() !== "true" && (
+                  <span className="text-[12px] text-text-muted mt-[2px] pl-[20px]">{record.medication_needed}</span>
+                )}
+              </div>
+            )}
+            {!record.shelter_needed && !record.food_needed && !record.water_needed && !record.medication_needed && (
+              <span className="text-[13px] text-text-muted">No specific physical needs identified.</span>
+            )}
           </div>
         </div>
-      )}
-    </motion.div>
+
+        {/* CONFIDENCE */}
+        <div className="flex flex-col gap-[8px] border-t border-border pt-[20px]">
+          <div className="flex justify-between items-center text-[12px] font-medium uppercase tracking-[0.08em] text-text-muted">
+            <span>Confidence</span>
+            <span>{conf.label}</span>
+          </div>
+          <div className="h-[6px] bg-bg-surface rounded-full overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: conf.width }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+              className={cn("h-full rounded-full", conf.color)}
+            />
+          </div>
+        </div>
+
+        {/* MISSING INFO */}
+        {record.missing_information && record.missing_information.length > 0 && (
+          <div className="mt-[4px] bg-triage-orange-bg border border-triage-orange-border border-l-[4px] border-l-triage-orange rounded-[8px] p-[16px]">
+            <p className="text-[13px] font-semibold text-text-primary mb-[8px]">Ask the volunteer to clarify:</p>
+            <ul className="flex flex-col gap-[6px]">
+              {record.missing_information.map((info, i) => (
+                <li key={i} className="flex items-start gap-[8px] text-[13px] text-text-primary">
+                  <AlertTriangle size={14} className="text-triage-orange mt-[2px] shrink-0" />
+                  <span>{info}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+      </div>
+    </div>
   );
 }
