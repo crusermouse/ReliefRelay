@@ -61,8 +61,8 @@ app = FastAPI(title="ReliefRelay API", version="1.0.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://10.0.1.213:3000"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Accept", "Origin", "X-Requested-With"],
     allow_credentials=True,
 )
 
