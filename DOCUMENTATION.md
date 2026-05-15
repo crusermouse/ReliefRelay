@@ -124,8 +124,7 @@ ReliefRelay/
 │   │   ├── gemma.py            # Ollama client: chat_text, chat_vision, chat_with_tools
 │   │   ├── extractor.py        # Multimodal field extraction → IntakeRecord
 │   │   ├── rag.py              # ChromaDB build/load/retrieve
-│   │   ├── agent.py            # Two-pass tool-calling agent loop
-│   │   └── triage.py           # Scoring: GREEN/YELLOW/ORANGE/RED
+│   │   └── agent.py            # Two-pass tool-calling agent loop
 │   │
 │   ├── api/                    # (route modules, included via main.py)
 │   │   ├── intake.py
@@ -281,28 +280,6 @@ Gemma 4 → Final action plan text
 
 **Fallback**: If Gemma is unavailable, the agent falls back to rule-based resource lookup + a templated action plan. The case is still persisted.
 
----
-
-### `ai/triage.py` — Triage Scoring
-
-Computes triage level with compounding factor escalation:
-
-```
-Base level: medical_urgency → GREEN/YELLOW/ORANGE/RED
-
-Compounding factors (each +1):
-  - shelter_needed
-  - food_needed
-  - water_needed
-  - special_needs present
-  - family_members > 3
-
-Escalation rules:
-  YELLOW + ≥3 factors → ORANGE
-  ORANGE + ≥4 factors → RED
-```
-
----
 
 ### `tools/case_manager.py` — SQLite CRUD
 
