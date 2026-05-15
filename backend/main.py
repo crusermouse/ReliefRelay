@@ -12,6 +12,7 @@ from ai.gemma import probe_ollama, probe_gemma_model
 from tools.pdf_export import generate_pdf
 from tools.case_manager import list_cases, get_case
 from config import settings
+from api.export import router as export_router
 
 # Load RAG index at startup (persisted — loads in seconds)
 vector_store = None
@@ -57,6 +58,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ReliefRelay API", version="1.0.0", lifespan=lifespan)
+app.include_router(export_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -250,22 +252,22 @@ async def metrics():
     """
     from tools.case_manager import list_cases
     import time
-    
+
     service_status = getattr(app.state, "service_status", {})
     cases = list_cases(limit=1000)
-    
+
     # Calculate statistics
     case_count = len(cases)
     triage_distribution = {}
     for case in cases:
         triage = case.get("triage_level", "unknown")
         triage_distribution[triage] = triage_distribution.get(triage, 0) + 1
-    
+
     # Estimate inference times from logs (simplified; in production would track per-request)
     avg_inference_time_sec = 45  # E4B on CPU typical
     if service_status.get("ollama") == "ready":
         avg_inference_time_sec = 8  # E4B on GPU if available
-    
+
     return {
         "timestamp": __import__("datetime").datetime.now(tz=__import__("datetime").timezone.utc).isoformat(),
         "system_status": service_status.get("mode", "degraded"),
