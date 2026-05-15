@@ -121,12 +121,15 @@ TRIAGE_COLORS = {
 }
 
 
-def generate_pdf(case_id: str) -> str:
+def generate_pdf(case_id: str, case_data: dict = None) -> str:
     """Generate a printable referral PDF for the given case_id."""
     case_id = _validate_case_id(case_id)
-    case = get_case(case_id)
-    if not case:
-        raise ValueError(f"Case {case_id} not found")
+    if case_data is None:
+        case = get_case(case_id)
+        if not case:
+            raise ValueError(f"Case {case_id} not found")
+    else:
+        case = case_data
 
     output_path = OUTPUT_DIR / f"relief_case_{case_id}.pdf"
     doc = SimpleDocTemplate(
