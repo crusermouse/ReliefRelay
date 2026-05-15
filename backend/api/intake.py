@@ -36,7 +36,8 @@ async def process_intake(
     elif voice_text and intake_record:
         # Merge voice data into image-extracted data to fill gaps
         voice_data = extract_from_voice(voice_text)
-        for field, val in voice_data.dict().items():
+        for field in voice_data.model_fields:
+            val = getattr(voice_data, field)
             if val and not getattr(intake_record, field):
                 setattr(intake_record, field, val)
 
@@ -44,7 +45,8 @@ async def process_intake(
         intake_record = extract_from_text(manual_text)
     elif manual_text and intake_record:
         text_data = extract_from_text(manual_text)
-        for field, val in text_data.dict().items():
+        for field in text_data.model_fields:
+            val = getattr(text_data, field)
             if val and not getattr(intake_record, field):
                 setattr(intake_record, field, val)
 
