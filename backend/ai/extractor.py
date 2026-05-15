@@ -42,11 +42,11 @@ def _fallback_intake_from_text(text: str) -> IntakeRecord:
         if keyword in lowered and label not in issues:
             issues.append(label)
 
-    if any(term in lowered for term in ["chest pain", "unconscious", "not breathing", "severe bleeding", "difficulty breathing"]):
+    if "chest pain" in lowered or "unconscious" in lowered or "not breathing" in lowered or "severe bleeding" in lowered or "difficulty breathing" in lowered:
         urgency = "critical"
-    elif any(term in lowered for term in ["urgent", "severe", "needs doctor", "needs medical", "hospital"]):
+    elif "urgent" in lowered or "severe" in lowered or "needs doctor" in lowered or "needs medical" in lowered or "hospital" in lowered:
         urgency = "high"
-    elif any(term in lowered for term in ["shelter", "food", "water", "needs help", "support"]):
+    elif "shelter" in lowered or "food" in lowered or "water" in lowered or "needs help" in lowered or "support" in lowered:
         urgency = "medium"
     else:
         urgency = "low" if issues else "none"
@@ -57,9 +57,9 @@ def _fallback_intake_from_text(text: str) -> IntakeRecord:
     return IntakeRecord(
         presenting_issues=issues,
         medical_urgency=urgency,  # type: ignore[arg-type]
-        shelter_needed=any(term in lowered for term in ["shelter", "evacuate", "evacuation"]),
+        shelter_needed="shelter" in lowered or "evacuate" in lowered or "evacuation" in lowered,
         food_needed="food" in lowered,
-        water_needed=any(term in lowered for term in ["water", "dehydration"]),
+        water_needed="water" in lowered or "dehydration" in lowered,
         family_members=family_members,
         missing_information=["name", "age", "location_found"],
         extraction_confidence="low",
