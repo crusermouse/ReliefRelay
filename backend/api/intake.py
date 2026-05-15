@@ -1,12 +1,9 @@
 from fastapi import APIRouter, File, UploadFile, Form, HTTPException
-from fastapi.responses import FileResponse
 import aiofiles, uuid
 from pathlib import Path
 from ai.extractor import extract_from_image, extract_from_voice, extract_from_text
-from ai.rag import retrieve, generate_grounded_plan
+from ai.rag import retrieve
 from ai.agent import run_intake_agent
-from ai.gemma import chat_text
-from tools.pdf_export import generate_pdf
 
 router = APIRouter()
 
