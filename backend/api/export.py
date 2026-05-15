@@ -153,7 +153,7 @@ async def export_cases_bulk(limit: int = 50):
         # Write individual PDFs
         for case in cases:
             try:
-                pdf_path = generate_pdf(case["case_id"])
+                pdf_path = generate_pdf(case["case_id"], case_data=case)
                 zf.write(pdf_path, arcname=f"pdf/{case['case_id']}.pdf")
             except Exception as e:
                 # Log but don't fail; add error note to index
