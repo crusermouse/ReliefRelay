@@ -1124,10 +1124,6 @@ Be specific, brief, and actionable. Real lives depend on this being clear."""</s
     <div class="tool-desc">Saves the extracted intake record to SQLite with a unique case ID and timestamp.</div>
   </div>
   <div class="tool-card">
-    <div class="tool-header"><span class="tool-name">score_triage</span></div>
-    <div class="tool-desc">Computes a triage priority score (1–5) based on medical urgency and needs, and assigns a color-coded alert level.</div>
-  </div>
-  <div class="tool-card">
     <div class="tool-header"><span class="tool-name">generate_referral_pdf</span></div>
     <div class="tool-desc">Produces a printable PDF referral packet with all case data, action plan, and resource addresses.</div>
   </div>
