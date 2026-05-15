@@ -2,9 +2,10 @@ import re
 import csv
 import json
 import zipfile
+import asyncio
 from io import BytesIO, StringIO
 from datetime import datetime
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from tools.pdf_export import generate_pdf
 from tools.case_manager import get_case, list_cases
@@ -12,6 +13,67 @@ from tools.case_manager import get_case, list_cases
 router = APIRouter()
 
 _CASE_ID_RE = re.compile(r"^CASE-[0-9A-F]{6}$")
+
+def _build_bulk_export(limit: int) -> tuple[bytes, str]:
+    cases = list_cases(limit=limit)
+
+    # Create ZIP in memory
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        # Write index CSV
+        csv_output = StringIO()
+        writer = csv.DictWriter(
+            csv_output,
+            fieldnames=[
+                "case_id", "triage_level", "created_at", "name", "age",
+                "medical_urgency", "family_members", "action_plan_url"
+            ]
+        )
+        writer.writeheader()
+        for case in cases:
+            intake_data = json.loads(case["intake_data"]) if isinstance(case["intake_data"], str) else case["intake_data"]
+            writer.writerow({
+                "case_id": case["case_id"],
+                "triage_level": case["triage_level"],
+                "created_at": case["created_at"],
+                "name": intake_data.get("name", ""),
+                "age": intake_data.get("age", ""),
+                "medical_urgency": intake_data.get("medical_urgency", ""),
+                "family_members": intake_data.get("family_members", 1),
+                "action_plan_url": f"pdf/{case['case_id']}.pdf",
+            })
+        zf.writestr("index.csv", csv_output.getvalue())
+        csv_output.close()
+
+        # Write full data export (JSON)
+        data_export = {
+            "export_date": datetime.now().isoformat(),
+            "case_count": len(cases),
+            "cases": [
+                {
+                    "case_id": case["case_id"],
+                    "triage_level": case["triage_level"],
+                    "created_at": case["created_at"],
+                    "intake_data": json.loads(case["intake_data"]) if isinstance(case["intake_data"], str) else case["intake_data"],
+                    "action_plan": case.get("action_plan", ""),
+                }
+                for case in cases
+            ]
+        }
+        zf.writestr("data.json", json.dumps(data_export, indent=2))
+
+        # Write individual PDFs
+        for case in cases:
+            try:
+                pdf_path = generate_pdf(case["case_id"])
+                zf.write(pdf_path, arcname=f"pdf/{case['case_id']}.pdf")
+            except Exception as e:
+                # Log but don't fail; add error note to index
+                print(f"Warning: PDF generation failed for {case['case_id']}: {e}")
+
+    zip_buffer.seek(0)
+    filename = f"relief_cases_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+    return zip_buffer.getvalue(), filename
 
 
 @router.get("/export/{case_id}/pdf")
@@ -37,13 +99,13 @@ async def export_cases_csv(limit: int = 100):
     Useful for humanitarian organizations to import case data into their own systems.
     """
     cases = list_cases(limit=limit)
-    
+
     output = StringIO()
     writer = csv.DictWriter(
-        output, 
+        output,
         fieldnames=[
             "case_id",
-            "triage_level", 
+            "triage_level",
             "created_at",
             "name",
             "age",
@@ -59,7 +121,7 @@ async def export_cases_csv(limit: int = 100):
             "action_plan_summary",
         ]
     )
-    
+
     writer.writeheader()
     for case in cases:
         intake_data = case["intake_data"]
@@ -81,10 +143,10 @@ async def export_cases_csv(limit: int = 100):
             "action_plan_summary": (case.get("action_plan", "")[:100] + "...") if case.get("action_plan") else "",
         }
         writer.writerow(row)
-    
+
     csv_content = output.getvalue()
     output.close()
-    
+
     # Return as downloadable CSV file
     return StreamingResponse(
         iter([csv_content]),
@@ -100,69 +162,12 @@ async def export_cases_bulk(limit: int = 50):
     - index.csv (case summary)
     - individual PDF packets for each case
     - data.json (full case records for data import)
-    
+
     Production-ready for humanitarian organization deployment.
     """
-    cases = list_cases(limit=limit)
-    
-    # Create ZIP in memory
-    zip_buffer = BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        # Write index CSV
-        csv_output = StringIO()
-        writer = csv.DictWriter(
-            csv_output, 
-            fieldnames=[
-                "case_id", "triage_level", "created_at", "name", "age",
-                "medical_urgency", "family_members", "action_plan_url"
-            ]
-        )
-        writer.writeheader()
-        for case in cases:
-            intake_data = case["intake_data"]
-            writer.writerow({
-                "case_id": case["case_id"],
-                "triage_level": case["triage_level"],
-                "created_at": case["created_at"],
-                "name": intake_data.get("name", ""),
-                "age": intake_data.get("age", ""),
-                "medical_urgency": intake_data.get("medical_urgency", ""),
-                "family_members": intake_data.get("family_members", 1),
-                "action_plan_url": f"pdf/{case['case_id']}.pdf",
-            })
-        zf.writestr("index.csv", csv_output.getvalue())
-        csv_output.close()
-        
-        # Write full data export (JSON)
-        data_export = {
-            "export_date": datetime.now().isoformat(),
-            "case_count": len(cases),
-            "cases": [
-                {
-                    "case_id": case["case_id"],
-                    "triage_level": case["triage_level"],
-                    "created_at": case["created_at"],
-                    "intake_data": case["intake_data"],
-                    "action_plan": case.get("action_plan", ""),
-                }
-                for case in cases
-            ]
-        }
-        zf.writestr("data.json", json.dumps(data_export, indent=2))
-        
-        # Write individual PDFs
-        for case in cases:
-            try:
-                pdf_path = generate_pdf(case["case_id"])
-                zf.write(pdf_path, arcname=f"pdf/{case['case_id']}.pdf")
-            except Exception as e:
-                # Log but don't fail; add error note to index
-                print(f"Warning: PDF generation failed for {case['case_id']}: {e}")
-
-    zip_buffer.seek(0)
-    return StreamingResponse(
-        iter([zip_buffer.getvalue()]),
+    zip_bytes, filename = await asyncio.to_thread(_build_bulk_export, limit)
+    return Response(
+        content=zip_bytes,
         media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename=relief_cases_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"}
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
-
