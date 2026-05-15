@@ -21,6 +21,9 @@ _CASE_ID_RE = re.compile(r"^CASE-[0-9A-F]{6}$")
 _INVALID_TEXT_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
 
 
+_REGISTERED_FONTS = set()
+
+
 @lru_cache(maxsize=1)
 def _register_fonts() -> tuple[str, str]:
     """Prefer a Unicode-capable font, but fall back safely if unavailable."""
@@ -36,19 +39,30 @@ def _register_fonts() -> tuple[str, str]:
     body_font = "Helvetica"
     bold_font = "Helvetica-Bold"
     for font_name, font_path in candidates:
-        if Path(font_path).exists():
-            pdfmetrics.registerFont(TTFont(font_name, font_path))
+        if font_name in _REGISTERED_FONTS:
             body_font = font_name
             break
+        if Path(font_path).exists():
+            try:
+                pdfmetrics.registerFont(TTFont(font_name, font_path))
+                _REGISTERED_FONTS.add(font_name)
+                body_font = font_name
+                break
+            except Exception:
+                continue
 
     for font_name, font_path in bold_candidates:
-        if Path(font_path).exists():
-            pdfmetrics.registerFont(TTFont(font_name, font_path))
+        if font_name in _REGISTERED_FONTS:
             bold_font = font_name
             break
-
-    if body_font == "Helvetica" and bold_font == "Helvetica-Bold":
-        return body_font, bold_font
+        if Path(font_path).exists():
+            try:
+                pdfmetrics.registerFont(TTFont(font_name, font_path))
+                _REGISTERED_FONTS.add(font_name)
+                bold_font = font_name
+                break
+            except Exception:
+                continue
 
     return body_font, bold_font
 
