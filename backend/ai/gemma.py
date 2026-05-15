@@ -62,9 +62,7 @@ def probe_gemma_model(model: str | None = None) -> tuple[bool, str]:
                 if names:
                     return False, f"Model '{model_name}' not found. Available: {', '.join(names[:3])}"
             except Exception:
-                pass
-            # Tags endpoint responded — Ollama is up even if we couldn't parse
-            return True, "ready"
+                return False, "Malformed JSON response from Ollama"
 
         return False, f"HTTP {r.status_code}"
     except Exception as exc:  # pragma: no cover - best-effort probe
