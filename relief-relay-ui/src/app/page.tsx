@@ -1,16 +1,36 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { HeartPulse, Menu, X, Inbox } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Toaster, toast } from "react-hot-toast";
+import { Zap } from "lucide-react";
 import { IntakePanel } from "@/components/IntakePanel";
 import { TriageCard } from "@/components/TriageCard";
 import { EvidenceRail } from "@/components/EvidenceRail";
 import { ActionPacket } from "@/components/ActionPacket";
 import { CaseList } from "@/components/CaseList";
+import { LiveReasoningTimeline, type LoadingStep } from "@/components/LiveReasoningTimeline";
+import { OfflineModeOverlay } from "@/components/OfflineModeOverlay";
+import { CrisisOperationsMap } from "@/components/CrisisOperationsMap";
+import { ImpactDashboard } from "@/components/ImpactDashboard";
+import { CaseActivityFeed } from "@/components/CaseActivityFeed";
+import { OperationalReadinessPanel } from "@/components/OperationalReadinessPanel";
 import { fetchCases, fetchCase, fetchHealth, submitIntake } from "@/lib/api";
 import type { IntakeResponse, Case, HealthResponse } from "@/lib/types";
-import { cn } from "@/lib/utils";
+
+const STEP_LABELS: Record<LoadingStep, string> = {
+  idle: "",
+  extracting: "Gemma 4 Vision — extracting intake fields…",
+  retrieving: "RAG retrieval — matching policy corpus…",
+  running_agent: "Agent loop — tool calling + packet assembly…",
+  done: "Case processed",
+};
+
+const HERO_PILLS = [
+  { label: "Field-deployed in <5 minutes", color: "border-cyan-500/20 text-cyan-300 bg-cyan-500/[0.06]" },
+  { label: "Zero cloud dependency", color: "border-purple-500/20 text-purple-300 bg-purple-500/[0.06]" },
+  { label: "PDF referral in seconds", color: "border-emerald-500/20 text-emerald-300 bg-emerald-500/[0.06]" },
+];
 
 function hydrateCaseResponse(caseRecord: Case): IntakeResponse {
   return {
@@ -25,226 +45,475 @@ function hydrateCaseResponse(caseRecord: Case): IntakeResponse {
   };
 }
 
-export default function AppShell() {
+function getStatusText(isOnline: boolean, backendReachable: boolean, health: HealthResponse | null) {
+  if (!isOnline) return "Browser offline";
+  if (!backendReachable) return "Backend unavailable";
+  if (health?.status === "operational") return "Local AI operational";
+  if (health?.status === "degraded") return "Degraded mode";
+  return "Checking services…";
+}
+
+export default function Home() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const [result, setResult] = useState<IntakeResponse | null>(null);
   const [cases, setCases] = useState<Case[]>([]);
-  const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
-  const [currentResponse, setCurrentResponse] = useState<IntakeResponse | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [loadingStep, setLoadingStep] = useState<LoadingStep>("idle");
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
+  const [selectedCase, setSelectedCase] = useState<IntakeResponse | null>(null);
+  const [selectedCaseLoading, setSelectedCaseLoading] = useState(false);
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [backendReachable, setBackendReachable] = useState(true);
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator !== "undefined" ? navigator.onLine : true));
 
-  // Mobile UI state
-  const [activeTab, setActiveTab] = useState<"intake" | "cases" | "export">("intake");
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  const loadCases = useCallback(async () => {
+  const refreshCases = useCallback(async () => {
     try {
       const data = await fetchCases();
       setCases(data.cases);
-    } catch (err) {
-      console.error("Failed to load cases", err);
+    } catch { /* keep last list */ }
+  }, []);
+
+  const refreshHealth = useCallback(async () => {
+    try {
+      const data = await fetchHealth();
+      setHealth(data);
+      setBackendReachable(true);
+    } catch {
+      setBackendReachable(false);
+      setHealth(null);
     }
   }, []);
 
   useEffect(() => {
-    loadCases();
-  }, [loadCases]);
+    const timer = window.setTimeout(() => {
+      void refreshCases();
+      void refreshHealth();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [refreshCases, refreshHealth]);
 
-  const handleSelectCase = async (id: string) => {
-    setActiveCaseId(id);
-    setActiveTab("export"); // switch to result view on mobile
+  useEffect(() => {
+    const sync = () => {
+      const online = navigator.onLine;
+      setIsOnline(online);
+      if (online) void refreshHealth();
+      else setBackendReachable(false);
+    };
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+    };
+  }, [refreshHealth]);
+
+  useEffect(() => {
+    if (!selectedCaseId || result?.case_id === selectedCaseId) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setSelectedCaseLoading(true);
+      fetchCase(selectedCaseId)
+        .then((c) => { if (!cancelled) setSelectedCase(hydrateCaseResponse(c)); })
+        .catch(() => { if (!cancelled) { setSelectedCase(null); toast.error(`Case ${selectedCaseId} could not be loaded.`); } })
+        .finally(() => { if (!cancelled) setSelectedCaseLoading(false); });
+    }, 0);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [result, selectedCaseId]);
+
+  const handleSubmit = async (image?: File, voiceText?: string, manualText?: string, demoId?: string) => {
+    if (!image && !voiceText && !manualText && !demoId) {
+      toast.error("Please provide an image, voice note, typed text, or select a demo.");
+      return;
+    }
     try {
-      const caseData = await fetchCase(id);
-      setCurrentResponse(hydrateCaseResponse(caseData));
-    } catch (err) {
-      toast.error("Failed to load case");
-      console.error(err);
+      setResult(null);
+      setSelectedCase(null);
+      setLoadingStep(demoId ? "done" : "extracting");
+      const data = await submitIntake(image, voiceText, manualText, demoId);
+      setResult(data);
+      setSelectedCaseId(data.case_id ?? null);
+      setSelectedCase(data);
+      if (demoId) {
+        // For demo, show done immediately
+        setLoadingStep("done");
+      } else {
+        setLoadingStep("done");
+      }
+      await refreshCases();
+      await refreshHealth();
+
+      // Enhanced success toast with celebration
+      if (demoId) {
+        toast.success("⚡ Demo loaded instantly!", {
+          icon: "✨",
+          duration: 3000,
+          style: {
+            background: "#0f172a",
+            color: "#e0f2fe",
+            border: "1px solid rgba(34, 211, 238, 0.3)",
+          },
+        });
+      } else {
+        toast.success(`🎯 Case ${data.case_id} created!`, {
+          icon: "✓",
+          duration: 4000,
+          style: {
+            background: "#0f172a",
+            color: "#e0f2fe",
+            border: "1px solid rgba(34, 211, 238, 0.3)",
+          },
+        });
+      }
+    } catch (err: unknown) {
+      setLoadingStep("idle");
+      toast.error(err instanceof Error ? `⚠️ ${err.message}` : "⚠️ Intake failed", {
+        duration: 4000,
+        style: {
+          background: "#0f172a",
+          color: "#fecaca",
+          border: "1px solid rgba(239, 68, 68, 0.3)",
+        },
+      });
     }
   };
 
-  const handleNewIntake = () => {
-    setActiveCaseId(null);
-    setCurrentResponse(null);
-    setActiveTab("intake");
-  };
+  const latestCaseId = result?.case_id ?? selectedCaseId;
+  const activeResponse = useMemo(() => (selectedCaseId ? selectedCase ?? result : result), [result, selectedCase, selectedCaseId]);
+  const loadingBanner = loadingStep !== "idle" && loadingStep !== "done";
+  const statusText = getStatusText(isOnline, backendReachable, health);
+  const statusTone = !isOnline || !backendReachable || health?.status === "degraded" ? "amber" : "emerald";
 
-  const handleSubmitIntake = async (file?: File, text?: string) => {
-    setIsProcessing(true);
-    setCurrentResponse(null);
-    setActiveCaseId(null);
-
-    try {
-      const response = await submitIntake(file, text);
-      setCurrentResponse(response);
-      setActiveCaseId(response.case_id);
-      await loadCases();
-      setActiveTab("export");
-    } catch (err) {
-      toast.error("Failed to process intake");
-      console.error(err);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+  // Keyboard shortcuts for accessibility (D = Demo, L = Live intake)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "d" || e.key === "D") {
+        e.preventDefault();
+        const intakePanel = document.querySelector('[data-intake-panel]') as HTMLElement;
+        if (intakePanel) {
+          intakePanel.scrollIntoView({ behavior: "smooth", block: "center" });
+          toast.success("🚀 Demo scenarios ready below", {
+            icon: "⌨️",
+            duration: 2500,
+            style: {
+              background: "#0f172a",
+              color: "#e0f2fe",
+              border: "1px solid rgba(34, 211, 238, 0.3)",
+            },
+          });
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-bg-primary text-text-primary">
-      <Toaster position="top-right" toastOptions={{ className: "bg-bg-surface text-text-primary border border-border" }} />
+    <div className="min-h-screen text-gray-100 flex flex-col relative">
+      <OfflineModeOverlay isOnline={isOnline} backendReachable={backendReachable} health={health} />
 
-      {/* HEADER */}
-      <header className="sticky top-0 z-50 h-[52px] bg-bg-secondary border-b border-border flex items-center justify-between px-[16px] shrink-0">
-        <div className="flex items-center gap-[8px]">
-          {/* Mobile hamburger toggle */}
-          <button
-            className="md:hidden p-[4px] -ml-[4px] text-text-secondary hover:text-text-primary"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          >
-            {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
-
-          <div className="flex items-center gap-[8px] text-text-primary">
-            <HeartPulse size={18} className="text-triage-red" />
-            <span className="font-semibold text-[15px] tracking-tight">ReliefRelay</span>
+      {/* ── HEADER ── */}
+      <header className="border-b border-white/[0.07] px-5 md:px-8 py-3.5 flex items-center justify-between backdrop-blur sticky top-0 z-40 bg-[#06090f]/70">
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-400/20 to-blue-600/30 border border-cyan-400/20 flex items-center justify-center">
+              <div className="w-3 h-3 rounded-sm bg-cyan-400/60" />
+            </div>
+            <div className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-[#06090f] status-blink" />
           </div>
+          <div>
+            <span className="text-sm md:text-base font-bold text-white tracking-tight">ReliefRelay</span>
+            <span className="text-[10px] text-gray-600 font-mono ml-2">v2.0</span>
+          </div>
+          <span className="hidden sm:block text-[10px] text-gray-600 font-mono border border-white/[0.06] rounded px-2 py-0.5">Command Center</span>
         </div>
-
-        <div className="flex items-center gap-[16px]">
-          {activeCaseId && (
-            <span className="hidden sm:inline-block font-mono text-[13px] text-text-muted bg-bg-surface px-[8px] py-[2px] rounded-[6px] border border-border">
-              {activeCaseId}
-            </span>
-          )}
-          <div className="flex items-center gap-[8px] bg-bg-surface border border-border px-[12px] py-[4px] rounded-[12px]">
-            <div className="w-[8px] h-[8px] rounded-full bg-triage-green animate-[status-blink_2.8s_ease-in-out_infinite]" />
-            <span className="text-[12px] font-medium text-text-secondary">Offline Ready</span>
+        <div className="flex items-center gap-4 md:gap-6">
+          <span className="text-[10px] text-gray-500 font-mono hidden lg:block">Gemma 4 · RAG · Native Tooling · Local Inference</span>
+          <div className="flex items-center gap-2" aria-live="polite">
+            {mounted ? (
+              <>
+                <span className={`w-1.5 h-1.5 rounded-full ${statusTone === "amber" ? "bg-amber-300 animate-pulse" : "bg-emerald-400 pulse-ring-emerald"}`} />
+                <span className={`text-xs font-medium font-mono ${statusTone === "amber" ? "text-amber-300" : "text-emerald-400 text-glow-emerald"}`}>{statusText}</span>
+              </>
+            ) : (
+              <>
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-pulse" />
+                <span className="text-xs font-medium text-gray-500 font-mono">Checking…</span>
+              </>
+            )}
           </div>
         </div>
       </header>
 
-      {/* BODY */}
-      <div className="flex flex-1 overflow-hidden relative">
-        {/* SIDEBAR (Desktop) */}
-        <aside className={cn(
-          "w-[240px] bg-bg-secondary border-r border-border flex flex-col shrink-0",
-          "md:flex", // Always flex on md+
-          // Mobile state:
-          isMobileMenuOpen ? "absolute inset-y-0 left-0 z-40" : "hidden"
-        )}>
-          <div className="flex-1 overflow-y-auto">
-            <CaseList
-              cases={cases}
-              activeCaseId={activeCaseId}
-              onSelectCase={(id) => {
-                handleSelectCase(id);
-                setIsMobileMenuOpen(false);
-              }}
-              onNewCase={() => {
-                handleNewIntake();
-                setIsMobileMenuOpen(false);
-              }}
-            />
-          </div>
-          <div className="p-[16px] border-t border-border shrink-0">
-            <p className="text-[12px] font-medium text-text-muted text-center">Gemma 4 E4B · Local</p>
-          </div>
-        </aside>
+      {/* ── HERO SECTION ── */}
+      <section className="px-5 md:px-8 pt-8 pb-5">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="glass-panel rounded-2xl p-6 md:p-10 relative overflow-hidden"
+        >
+          {/* Ambient grid */}
+          <div className="hero-grid absolute inset-0 rounded-2xl" />
+          {/* Scan line */}
+          <div className="scan-line absolute inset-0 rounded-2xl pointer-events-none" />
+          {/* Radial glow */}
+          <div className="absolute -top-24 -left-16 w-80 h-80 rounded-full bg-blue-600/[0.07] blur-3xl pointer-events-none" />
+          <div className="absolute -top-16 right-0 w-60 h-60 rounded-full bg-cyan-400/[0.05] blur-3xl pointer-events-none" />
 
-        {/* Mobile backdrop for sidebar */}
-        {isMobileMenuOpen && (
-          <div
-            className="absolute inset-0 bg-black/50 z-30 md:hidden"
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-        )}
+          <div className="relative z-10">
+            <motion.p
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="text-[10px] uppercase tracking-[0.25em] text-cyan-400 mb-3 font-mono flex items-center gap-2"
+            >
+              <span className="w-4 h-px bg-cyan-400/50" />
+              Humanitarian Intelligence Platform
+              <span className="w-4 h-px bg-cyan-400/50" />
+            </motion.p>
 
-        {/* MAIN CONTENT */}
-        <main className="flex-1 overflow-y-auto bg-bg-primary">
-          <div className="max-w-[800px] mx-auto p-[16px] md:p-[24px] lg:p-[32px] pb-[80px] md:pb-[32px] flex flex-col gap-[24px]">
+            <motion.h1
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.18 }}
+              className="text-3xl md:text-5xl font-bold leading-[1.1] text-white max-w-4xl tracking-tight"
+            >
+              When infrastructure fails,<br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-blue-300 to-cyan-400">
+                intelligence shouldn&apos;t.
+              </span>
+            </motion.h1>
 
-            {/* Desktop always shows everything based on state.
-                Mobile conditionally shows based on activeTab */}
-            <div className={cn(
-              "flex flex-col gap-[24px]",
-              activeTab === "intake" ? "flex" : "hidden md:flex"
-            )}>
-              {!currentResponse && (
-                <IntakePanel
-                  onSubmit={handleSubmitIntake}
-                  isProcessing={isProcessing}
-                  onClear={handleNewIntake}
-                />
-              )}
-            </div>
+            <motion.p
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.26 }}
+              className="text-gray-400 mt-4 max-w-2xl text-sm md:text-base leading-relaxed"
+            >
+              Offline-first disaster coordination powered by Gemma 4. AI amplifies responders with explainable triage, evidence-linked decisions, and resilient local operations — no cloud required.
+            </motion.p>
 
-            <div className={cn(
-              "flex flex-col gap-[24px]",
-              activeTab === "export" ? "flex" : "hidden md:flex"
-            )}>
-              {currentResponse && (
-                <>
-                  <div className="flex justify-end md:hidden mb-[-16px]">
-                    <button
-                      onClick={handleNewIntake}
-                      className="text-[13px] font-semibold text-accent hover:text-accent-light"
-                    >
-                      + New Intake
-                    </button>
-                  </div>
-                  <TriageCard record={currentResponse.intake_record} />
-                  <ActionPacket
-                    actionPlan={currentResponse.action_plan}
-                    caseId={currentResponse.case_id}
-                    toolsUsed={currentResponse.tools_used}
-                  />
-                  <EvidenceRail evidence={currentResponse.evidence} />
-                </>
-              )}
-              {!currentResponse && !isProcessing && activeTab === "export" && (
-                <div className="flex flex-col items-center justify-center py-[64px] text-text-muted">
-                  <Inbox size={48} className="mb-[16px] opacity-20" />
-                  <p>No active case to view.</p>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.36 }}
+              className="mt-6 flex flex-wrap gap-2"
+            >
+              {HERO_PILLS.map((p) => (
+                <span key={p.label} className={`text-[10px] font-mono px-3 py-1.5 rounded-full border ${p.color}`}>
+                  {p.label}
+                </span>
+              ))}
+            </motion.div>
+
+            {/* Operational breadcrumb */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.44 }}
+              className="mt-6 pt-5 border-t border-white/[0.05] grid grid-cols-3 gap-4"
+            >
+              {[
+                { label: "Gemma 4", sub: "Native vision + tool calling", color: "cyan" },
+                { label: "128K context", sub: "Full policy RAG inline", color: "purple" },
+                { label: "100% offline", sub: "SQLite · ChromaDB · PDF", color: "emerald" },
+              ].map(({ label, sub, color }) => (
+                <div key={label} className="text-center">
+                  <p className={`text-sm font-semibold text-${color}-300`}>{label}</p>
+                  <p className="text-[10px] text-gray-600 mt-0.5">{sub}</p>
                 </div>
-              )}
-            </div>
-
-            {/* Mobile "cases" tab content (just renders CaseList in main area for better mobile ux) */}
-            <div className={cn(
-              "md:hidden flex flex-col h-full",
-              activeTab === "cases" ? "flex" : "hidden"
-            )}>
-               <CaseList
-                  cases={cases}
-                  activeCaseId={activeCaseId}
-                  onSelectCase={(id) => {
-                    handleSelectCase(id);
-                  }}
-                  onNewCase={handleNewIntake}
-                />
-            </div>
-
+              ))}
+            </motion.div>
           </div>
-        </main>
-      </div>
+        </motion.div>
+      </section>
 
-      {/* MOBILE TAB BAR */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 h-[64px] bg-bg-surface border-t border-border flex items-center justify-around z-50 px-[16px]">
-        <button
-          onClick={() => setActiveTab("intake")}
-          className={cn("flex flex-col items-center gap-[4px]", activeTab === "intake" ? "text-accent" : "text-text-muted")}
+      {/* ── IMPACT METRICS ── */}
+      <section className="px-5 md:px-8 pb-5">
+        <ImpactDashboard totalCases={cases.length} />
+      </section>
+
+      {/* ── QUICK START CTA ── */}
+      <section className="px-5 md:px-8 pb-5">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          className="glass-panel rounded-2xl p-4 md:p-6 border border-emerald-500/30 bg-emerald-500/[0.05] flex items-center justify-between flex-wrap gap-4"
         >
-          <span className="text-[12px] font-semibold uppercase tracking-wider">Intake</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("cases")}
-          className={cn("flex flex-col items-center gap-[4px]", activeTab === "cases" ? "text-accent" : "text-text-muted")}
-        >
-          <span className="text-[12px] font-semibold uppercase tracking-wider">Cases</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("export")}
-          className={cn("flex flex-col items-center gap-[4px]", activeTab === "export" ? "text-accent" : "text-text-muted")}
-        >
-          <span className="text-[12px] font-semibold uppercase tracking-wider">Result</span>
-        </button>
-      </nav>
+          <div>
+            <h3 className="text-sm font-bold text-emerald-300 flex items-center gap-2">
+              <Zap className="w-4 h-4" />
+              Try a Live Demo
+            </h3>
+            <p className="text-xs text-emerald-100/70 mt-1">See instant {"<100ms"} response with pre-cached scenarios</p>
+          </div>
+          <span className="text-[10px] text-gray-500 font-mono">Press <kbd className="bg-white/10 border border-white/20 px-2 py-1 rounded font-mono text-xs">D</kbd> or scroll below</span>
+        </motion.div>
+      </section>
+
+      {/* ── PROCESSING BANNER ── */}
+      <AnimatePresence>
+        {loadingBanner && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="bg-gradient-to-r from-blue-600/10 via-cyan-500/10 to-blue-600/10 border-y border-cyan-500/20 px-6 py-3 flex items-center gap-4">
+              <div className="relative flex-shrink-0">
+                <div className="w-3 h-3 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin" />
+                <div className="absolute inset-0 rounded-full border-2 border-cyan-400/20 animate-ping" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-cyan-200 font-medium">{STEP_LABELS[loadingStep]}</p>
+                <div className="mt-1.5 h-0.5 bg-white/[0.06] rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-cyan-400 to-blue-400 rounded-full"
+                    initial={{ width: "5%" }}
+                    animate={{ width: loadingStep === "extracting" ? "35%" : loadingStep === "retrieving" ? "65%" : "90%" }}
+                    transition={{ duration: 0.8, ease: "easeOut" }}
+                  />
+                </div>
+              </div>
+              <span className="text-[10px] font-mono text-cyan-400/60 tracking-widest flex-shrink-0 hidden sm:block">
+                GEMMA 4 · LOCAL
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── MAIN GRID ── */}
+      <main className="flex-1 px-5 md:px-8 pb-8 space-y-4 mt-4">
+        <div className="grid xl:grid-cols-[260px_minmax(0,1fr)_380px] gap-4">
+
+          {/* Left sidebar — case list */}
+          <aside className="glass-panel rounded-2xl overflow-hidden hidden xl:flex flex-col min-h-[620px]">
+            <CaseList cases={cases} selectedCaseId={selectedCaseId} onSelect={setSelectedCaseId} />
+          </aside>
+
+          {/* Center column */}
+          <div className="space-y-4">
+            <IntakePanel onSubmit={handleSubmit} isLoading={loadingBanner} />
+            <LiveReasoningTimeline loadingStep={loadingStep} isLoading={loadingBanner} events={result?.workflow_events ?? []} />
+            <CrisisOperationsMap cases={cases} />
+            <div className="grid lg:grid-cols-2 gap-4">
+              <CaseActivityFeed latestCaseId={latestCaseId} />
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="glass-panel rounded-2xl p-4 md:p-5 space-y-3"
+              >
+                <h3 className="text-sm font-semibold text-white">AI Explainability</h3>
+                <p className="text-sm text-gray-400 leading-relaxed">
+                  Every recommendation links to retrieval evidence, confidence cues, and an auditable action chain suitable for field decision support.
+                </p>
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  {[
+                    { label: "Evidence-linked", color: "text-cyan-400" },
+                    { label: "Auditable chain", color: "text-purple-400" },
+                    { label: "Offline-safe", color: "text-emerald-400" },
+                  ].map(({ label, color }) => (
+                    <div key={label} className="bg-white/[0.02] border border-white/[0.05] rounded-lg p-2 text-center">
+                      <p className={`text-[10px] font-mono font-semibold ${color}`}>{label}</p>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            </div>
+          </div>
+
+          {/* Right sidebar — results or operational readiness */}
+          <aside className="space-y-4">
+            {selectedCaseLoading && selectedCaseId && selectedCaseId !== result?.case_id && (
+              <div className="glass-panel rounded-2xl p-5 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-4 h-4 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin flex-shrink-0" />
+                  <span className="text-sm text-gray-400">Loading case history…</span>
+                </div>
+                <div className="space-y-2">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="h-3 rounded shimmer bg-white/[0.03]" style={{ width: `${80 - i * 15}%` }} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <AnimatePresence mode="wait">
+              {activeResponse ? (
+                <motion.div
+                  key="case-result"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.35 }}
+                  className="space-y-4"
+                >
+                  {/* Staggered entry for result cards */}
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.05, duration: 0.3 }}
+                  >
+                    <TriageCard result={activeResponse} />
+                  </motion.div>
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.12, duration: 0.3 }}
+                  >
+                    <ActionPacket result={activeResponse} />
+                  </motion.div>
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.19, duration: 0.3 }}
+                  >
+                    <EvidenceRail evidence={activeResponse.evidence} toolsUsed={activeResponse.tools_used} />
+                  </motion.div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="readiness-panel"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.35 }}
+                >
+                  <OperationalReadinessPanel
+                    health={health}
+                    backendReachable={backendReachable}
+                    isOnline={isOnline}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </aside>
+        </div>
+
+        {/* Mobile case list */}
+        <div className="xl:hidden glass-panel rounded-2xl overflow-hidden">
+          <CaseList cases={cases} selectedCaseId={selectedCaseId} onSelect={setSelectedCaseId} />
+        </div>
+      </main>
+
+      <Toaster
+        position="bottom-right"
+        toastOptions={{
+          style: {
+            background: "#111827",
+            color: "#e8eaf0",
+            border: "1px solid rgba(255,255,255,0.07)",
+            fontSize: "13px",
+          },
+          success: { iconTheme: { primary: "#34d399", secondary: "#111827" } },
+          error:   { iconTheme: { primary: "#f87171", secondary: "#111827" } },
+        }}
+      />
     </div>
   );
 }

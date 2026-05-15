@@ -133,7 +133,7 @@ export function OfflineModeOverlay({ isOnline, backendReachable, health }: Offli
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 pointer-events-none bg-bg-primary/80"
+            className="fixed inset-0 z-50 pointer-events-none bg-[#05080ecc]"
           >
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(105,212,255,0.16),transparent_55%)]" />
             <motion.div

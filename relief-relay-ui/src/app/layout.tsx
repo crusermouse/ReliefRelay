@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { HeartPulse } from "lucide-react";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -17,7 +16,7 @@ export const metadata: Metadata = {
 export const viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0D1117",
+  themeColor: "#06090f",
 };
 
 export default function RootLayout({
@@ -27,11 +26,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full antialiased">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-      </head>
-      <body className="min-h-full flex flex-col bg-bg-primary text-text-primary font-sans text-[15px] font-normal leading-[1.6]">
+      <body className="min-h-full flex flex-col bg-background text-foreground">
         {children}
       </body>
     </html>

@@ -124,7 +124,7 @@ async def export_cases_csv(limit: int = 100):
 
     writer.writeheader()
     for case in cases:
-        intake_data = case["intake_data"]
+        intake_data = json.loads(case["intake_data"]) if isinstance(case["intake_data"], str) else case["intake_data"]
         row = {
             "case_id": case["case_id"],
             "triage_level": case["triage_level"],
