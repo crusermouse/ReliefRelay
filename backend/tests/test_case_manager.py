@@ -1,21 +1,5 @@
-import importlib
-import sys
-from unittest.mock import MagicMock
-
 import pytest
-
-if isinstance(sys.modules.get("tools"), MagicMock):
-    del sys.modules["tools"]
-if isinstance(sys.modules.get("tools.case_manager"), MagicMock):
-    del sys.modules["tools.case_manager"]
-
-case_manager = importlib.import_module("tools.case_manager")
-create_case_db = case_manager.create_case_db
-get_case = case_manager.get_case
-update_case_db = case_manager.update_case_db
-list_cases = case_manager.list_cases
-
-pytestmark = pytest.mark.usefixtures("fresh_db")
+from tools.case_manager import create_case_db, get_case, update_case_db, list_cases
 
 def test_create_case_db_returns_non_empty_string_id():
     case_id = create_case_db({"name": "Test User"}, "Urgent")
