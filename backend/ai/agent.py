@@ -3,6 +3,7 @@ from typing import Any
 
 from config import settings
 from ai.gemma import chat_with_tools, chat_text
+from ai.triage import score_triage
 from tools.case_manager import create_case_db, update_case_db
 from tools.resource_lookup import search_resources
 
@@ -52,18 +53,6 @@ TOOLS = [
 ]
 
 RESOURCE_PRIORITY = ["shelter", "food", "transport", "medical", "escalation"]
-TRIAGE_BY_URGENCY = {
-    "critical": "RED",
-    "high": "ORANGE",
-    "medium": "YELLOW",
-    "low": "GREEN",
-    "none": "GREEN",
-}
-
-
-def _derive_triage_level(intake_record: dict) -> str:
-    urgency = str(intake_record.get("medical_urgency", "none")).lower()
-    return TRIAGE_BY_URGENCY.get(urgency, "GREEN")
 
 
 def _safe_tool_args(tool_args: Any) -> dict[str, Any]:
@@ -172,7 +161,14 @@ async def run_intake_agent(intake_record: dict, rag_context: str) -> dict:
 
     Returns: { case_id, triage_level, action_plan, resources, evidence }
     """
-    triage_level = _derive_triage_level(intake_record)
+    triage_level = score_triage(
+        medical_urgency=str(intake_record.get("medical_urgency", "none")).lower(),
+        shelter_needed=bool(intake_record.get("shelter_needed")),
+        food_needed=bool(intake_record.get("food_needed")),
+        water_needed=bool(intake_record.get("water_needed")),
+        family_members=int(intake_record.get("family_members", 1)),
+        special_needs=intake_record.get("special_needs"),
+    )
     system = """You are a disaster relief intake agent.
 You receive a structured intake record and policy context.
 Your job is to:
