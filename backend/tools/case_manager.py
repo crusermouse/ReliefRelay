@@ -1,6 +1,7 @@
 import sqlite3
 import uuid
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from config import settings
@@ -50,6 +51,9 @@ def create_case_db(intake_data: dict, triage_level: str) -> str:
 
 def update_case_db(case_id: str, action_plan: str) -> None:
     """Update an existing case with the generated action plan."""
+    if not re.match(r"^CASE-[0-9A-F]{6}$", case_id):
+        return
+
     now = datetime.now(timezone.utc).isoformat()
     conn = _get_conn()
     conn.execute(
@@ -62,6 +66,9 @@ def update_case_db(case_id: str, action_plan: str) -> None:
 
 def get_case(case_id: str) -> dict | None:
     """Fetch a single case by ID."""
+    if not re.match(r"^CASE-[0-9A-F]{6}$", case_id):
+        return None
+
     conn = _get_conn()
     row = conn.execute("SELECT * FROM cases WHERE case_id = ?", (case_id,)).fetchone()
     conn.close()
