@@ -25,25 +25,27 @@ async def process_intake(
 
     # Step 1: Extract structured data from input
     if image and image.filename:
-        tmp_path = f"/tmp/{uuid.uuid4()}_{image.filename}"
+        # Sanitize filename to prevent path traversal
+        safe_filename = Path(image.filename).name
+        tmp_path = f"/tmp/{uuid.uuid4()}_{safe_filename}"
         async with aiofiles.open(tmp_path, "wb") as f:
             await f.write(await image.read())
-        intake_record = extract_from_image(tmp_path)
+        intake_record = await extract_from_image(tmp_path)
         Path(tmp_path).unlink(missing_ok=True)
 
     if voice_text and not intake_record:
-        intake_record = extract_from_voice(voice_text)
+        intake_record = await extract_from_voice(voice_text)
     elif voice_text and intake_record:
         # Merge voice data into image-extracted data to fill gaps
-        voice_data = extract_from_voice(voice_text)
+        voice_data = await extract_from_voice(voice_text)
         for field, val in voice_data.dict().items():
             if val and not getattr(intake_record, field):
                 setattr(intake_record, field, val)
 
     if manual_text and not intake_record:
-        intake_record = extract_from_text(manual_text)
+        intake_record = await extract_from_text(manual_text)
     elif manual_text and intake_record:
-        text_data = extract_from_text(manual_text)
+        text_data = await extract_from_text(manual_text)
         for field, val in text_data.dict().items():
             if val and not getattr(intake_record, field):
                 setattr(intake_record, field, val)
