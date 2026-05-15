@@ -15,6 +15,7 @@ backend/.env
 # Generated / large data
 backend/data/chroma_db/
 backend/data/cases.db
+backend/cases.db
 
 # Node
 relief-relay-ui/node_modules/
