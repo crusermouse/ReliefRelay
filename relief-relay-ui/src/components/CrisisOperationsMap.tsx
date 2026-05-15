@@ -11,7 +11,7 @@ const MAP_STYLE: google.maps.MapTypeStyle[] = [
   { elementType: "geometry",              stylers: [{ color: "#0b111b" }] },
   { elementType: "labels.text.stroke",    stylers: [{ color: "#0b111b" }] },
   { elementType: "labels.text.fill",      stylers: [{ color: "#4b5563" }] },
-  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#6b7280" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "var(--text-muted)" }] },
   { featureType: "poi",                   elementType: "labels", stylers: [{ visibility: "off" }] },
   { featureType: "poi.park",              elementType: "geometry", stylers: [{ color: "#0d1624" }] },
   { featureType: "road",                  elementType: "geometry", stylers: [{ color: "#1a2435" }] },
@@ -35,16 +35,16 @@ const STATIC_RESOURCES = [
 ];
 
 const TRIAGE_COLORS: Record<string, string> = {
-  RED:    "#ef4444",
-  ORANGE: "#f97316",
-  YELLOW: "#f59e0b",
-  GREEN:  "#10b981",
+  RED:    "var(--triage-red)",
+  ORANGE: "var(--triage-orange)",
+  YELLOW: "var(--triage-yellow)",
+  GREEN:  "var(--triage-green)",
 };
 
 const RESOURCE_COLORS: Record<string, string> = {
-  shelter: "#3b82f6",
-  medical: "#ec4899",
-  food:    "#8b5cf6",
+  shelter: "var(--accent)",
+  medical: "var(--accent-light)",
+  food:    "var(--text-secondary)",
 };
 
 // ── SIMULATED FALLBACK MAP ────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ function SimulatedMap({ cases }: { cases: Case[] }) {
   };
 
   return (
-    <div className="relative h-full w-full bg-[linear-gradient(180deg,#0b1a2a,#091422)]">
+    <div className="relative h-full w-full bg-bg-primary">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_35%,rgba(78,125,255,0.15),transparent_45%),radial-gradient(circle_at_75%_60%,rgba(255,112,125,0.10),transparent_42%)]" />
       <div className="absolute inset-0 terminal-grid opacity-30" />
       {MARKERS.map((marker, idx) => (
@@ -165,7 +165,7 @@ export function CrisisOperationsMap({ cases = [] }: CrisisOperationsMapProps) {
       <div className="relative h-56 md:h-80 rounded-xl border border-white/[0.08] overflow-hidden">
         {/* Loading state */}
         {!isLoaded && hasApiKey && !loadError && (
-          <div className="absolute inset-0 bg-[#0b111b] flex items-center justify-center z-10">
+          <div className="absolute inset-0 bg-bg-primary flex items-center justify-center z-10">
             <div className="flex flex-col items-center gap-2.5">
               <div className="w-6 h-6 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
               <span className="text-[10px] text-cyan-400/50 font-mono tracking-[0.2em]">INITIALIZING GRID</span>
@@ -196,9 +196,9 @@ export function CrisisOperationsMap({ cases = [] }: CrisisOperationsMapProps) {
                 onClick={() => setSelectedMarker(marker)}
                 icon={{
                   path: google.maps.SymbolPath.CIRCLE,
-                  fillColor: TRIAGE_COLORS[marker.triage_level] ?? "#6b7280",
+                  fillColor: TRIAGE_COLORS[marker.triage_level] ?? "var(--text-muted)",
                   fillOpacity: 0.95,
-                  strokeColor: "#ffffff",
+                  strokeColor: "var(--text-primary)",
                   strokeWeight: 1.5,
                   scale: marker.triage_level === "RED" ? 8 : 6,
                 }}
@@ -213,7 +213,7 @@ export function CrisisOperationsMap({ cases = [] }: CrisisOperationsMapProps) {
                 onClick={() => setSelectedMarker(res as SelectedMarker)}
                 icon={{
                   path: google.maps.SymbolPath.CIRCLE,
-                  fillColor: RESOURCE_COLORS[res.type] ?? "#6b7280",
+                  fillColor: RESOURCE_COLORS[res.type] ?? "var(--text-muted)",
                   fillOpacity: 0.85,
                   strokeColor: "rgba(255,255,255,0.6)",
                   strokeWeight: 1,
@@ -229,17 +229,17 @@ export function CrisisOperationsMap({ cases = [] }: CrisisOperationsMapProps) {
                 options={{ pixelOffset: new google.maps.Size(0, -8) }}
               >
                 <div style={{ padding: "8px 4px", minWidth: 140 }}>
-                  <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#e5e7eb", marginBottom: 4 }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-primary)", marginBottom: 4 }}>
                     {"case_id" in selectedMarker ? `Case ${selectedMarker.case_id}` : selectedMarker.label}
                   </p>
                   {"triage_level" in selectedMarker && (
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
                       <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: TRIAGE_COLORS[selectedMarker.triage_level], display: "inline-block" }} />
-                      <span style={{ fontSize: 10, fontWeight: 700, color: "#d1d5db" }}>{selectedMarker.triage_level} PRIORITY</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: "var(--text-primary)" }}>{selectedMarker.triage_level} PRIORITY</span>
                     </div>
                   )}
                   {"type" in selectedMarker && (
-                    <p style={{ fontSize: 10, color: "#9ca3af", textTransform: "capitalize" }}>{selectedMarker.type} facility</p>
+                    <p style={{ fontSize: 10, color: "var(--text-secondary)", textTransform: "capitalize" }}>{selectedMarker.type} facility</p>
                   )}
                 </div>
               </InfoWindow>

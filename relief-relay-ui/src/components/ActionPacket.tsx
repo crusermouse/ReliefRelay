@@ -1,174 +1,179 @@
-"use client";
-
-import { useMemo } from "react";
-import { motion, useReducedMotion } from "framer-motion";
-import { FileDown, ClipboardList, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import { motion } from "framer-motion";
+import { Cpu, FileDown, Check, Copy } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { getPdfUrl } from "@/lib/api";
-import type { IntakeResponse } from "@/lib/types";
+import { toast } from "react-hot-toast";
 
 interface ActionPacketProps {
-  result: IntakeResponse;
+  actionPlan: string;
+  caseId: string;
+  toolsUsed: string[];
 }
 
-const STAGES = ["extraction", "retrieval", "tool-calling", "packet-generation"] as const;
-
-const STAGE_LABELS: Record<string, string> = {
-  extraction:         "Field extraction",
-  retrieval:          "Policy retrieval",
-  "tool-calling":     "Tool orchestration",
-  "packet-generation":"Action packet",
+const TOOL_DESCRIPTIONS: Record<string, string> = {
+  search_local_resources: "Searches local offline databases for beds, supplies, and staff.",
+  create_case: "Registers a new case ID in the local triage system.",
+  score_triage: "Calculates medical urgency based on standard protocols.",
+  generate_referral_pdf: "Compiles intake and action plan into a printable referral document."
 };
 
-export function ActionPacket({ result }: ActionPacketProps) {
-  const reduceMotion = useReducedMotion();
-  const { action_plan, case_id, resources, workflow_events } = result;
+export function ActionPacket({ actionPlan, caseId, toolsUsed }: ActionPacketProps) {
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportSuccess, setExportSuccess] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  const handleDownload = () => {
-    if (!case_id) return;
-    window.open(getPdfUrl(case_id), "_blank", "noopener,noreferrer");
+  // Parse action plan by newlines, filtering out empty lines
+  const planSteps = actionPlan
+    .split('\n')
+    .map(line => line.replace(/^\d+[\.\)]\s*/, '').trim()) // remove leading numbers if they exist
+    .filter(line => line.length > 0);
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      // Simulate slight delay for feedback
+      await new Promise(r => setTimeout(r, 600));
+      window.open(getPdfUrl(caseId), "_blank");
+      setExportSuccess(true);
+      setTimeout(() => setExportSuccess(false), 2000);
+    } catch (e) {
+      toast.error("Failed to open PDF export");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
-  const resourceList = useMemo<Array<Record<string, unknown>>>(() => {
-    if (Array.isArray(resources)) return resources as Array<Record<string, unknown>>;
-    return Object.values(resources ?? {}).flat() as Array<Record<string, unknown>>;
-  }, [resources]);
-
-  const planText = useMemo(() => action_plan ?? "", [action_plan]);
-  const packetReady = workflow_events?.some(
-    (e) => e.stage === "packet-generation" && e.status !== "failed",
-  );
-  
-  const hasFailedStage = workflow_events?.some((e) => e.status === "failed");
-  const usingFallback = workflow_events?.some((e) => e.status === "fallback");
+  const handleCopy = () => {
+    navigator.clipboard.writeText(actionPlan);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    toast.success("Action plan copied");
+  };
 
   return (
-    <div className="glass-panel rounded-2xl p-4 space-y-4">
-      {/* Degradation warning if fallback is active */}
-      {usingFallback && (
-        <motion.div
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 flex items-start gap-3"
-        >
-          <AlertTriangle className="w-4 h-4 text-amber-300 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-xs font-semibold text-amber-200">⚠️ Offline Mode Active</p>
-            <p className="text-xs text-amber-100/70 mt-1">
-              Gemma 4 is unavailable. Using cached template for action plan. Complete intake form manually if possible.
-            </p>
-          </div>
-        </motion.div>
-      )}
+    <div className="bg-bg-secondary border border-border rounded-[16px] overflow-hidden">
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ClipboardList className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-          <h3 className="text-sm font-semibold text-white">Action Packet</h3>
-          {packetReady && (
-            <span className="text-[9px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full tracking-widest">
-              READY
-            </span>
-          )}
-          {usingFallback && (
-            <span className="text-[9px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full tracking-widest">
-              FALLBACK
-            </span>
-          )}
-        </div>
-        {case_id && (
-          <motion.button
-            onClick={handleDownload}
-            whileHover={{ scale: 1.05, y: -1 }}
-            whileTap={{ scale: 0.95 }}
-            aria-label={`Download PDF referral packet for case ${case_id}`}
-            className="flex items-center justify-center md:justify-start gap-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 active:scale-95 text-white border border-blue-400/50 text-xs md:text-sm px-4 py-2.5 md:py-2 rounded-lg md:rounded-xl transition-all duration-150 font-bold shadow-lg shadow-blue-500/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 min-h-[44px] md:min-h-auto"
+      {/* HEADER */}
+      <div className="flex items-center justify-between px-[16px] py-[12px] border-b border-border bg-bg-surface">
+        <h2 className="text-[13px] font-semibold text-text-muted uppercase tracking-[0.08em]">Action Plan</h2>
+        <div className="flex items-center gap-[8px]">
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-[6px] text-[12px] font-medium text-text-secondary hover:text-text-primary px-[8px] py-[4px] rounded-[6px] hover:bg-bg-tertiary transition-colors"
           >
-            <FileDown className="w-4 h-4 md:w-4 md:h-4 flex-shrink-0" />
-            <span className="hidden sm:inline">Export PDF</span>
-            <span className="sm:hidden">Export</span>
-          </motion.button>
-        )}
-      </div>
-
-      {/* Packet Assembly Stages */}
-      <div className="rounded-xl border border-cyan-400/15 bg-cyan-500/[0.04] p-3">
-        <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-400/80 mb-2.5 font-mono">Packet Assembly</p>
-        <div className="grid grid-cols-2 gap-1.5">
-          {STAGES.map((stage, idx) => {
-            const event = workflow_events?.find((e) => e.stage === stage);
-            const completed = event?.status === "complete" || event?.status === "fallback";
-            return (
-              <motion.div
-                key={stage}
-                initial={reduceMotion ? false : { opacity: 0, scale: 0.96 }}
-                animate={{ opacity: completed ? 1 : 0.5, scale: 1 }}
-                transition={{ delay: idx * 0.06 }}
-                className="rounded-lg border border-white/[0.07] bg-white/[0.025] px-2.5 py-2 flex items-center gap-1.5"
-              >
-                {completed
-                  ? <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-                  : <Clock className="w-3 h-3 text-gray-600 flex-shrink-0" />
-                }
-                <span className="text-[10px] text-gray-300 leading-tight">{STAGE_LABELS[stage]}</span>
-              </motion.div>
-            );
-          })}
+            {copied ? <Check size={14} className="text-triage-green" /> : <Copy size={14} />}
+            <span>Copy</span>
+          </button>
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-[6px] text-[12px] font-medium text-text-secondary hover:text-text-primary px-[8px] py-[4px] rounded-[6px] hover:bg-bg-tertiary transition-colors"
+          >
+            <FileDown size={14} />
+            <span className="hidden sm:inline-block">Export PDF ↓</span>
+          </button>
         </div>
       </div>
 
-      {/* Action Plan Text */}
-      <div className="bg-white/[0.02] border border-white/[0.05] rounded-xl p-4 max-h-64 overflow-y-auto">
-        {planText ? (
-          <div className="space-y-1.5">
-            {planText.split("\n").map((line, i) =>
-              line.trim() ? (
-                <p key={i} className="text-[13px] text-gray-300 leading-relaxed">
-                  {line}
-                </p>
-              ) : (
-                <div key={i} className="h-1.5" />
-              ),
+      <div className="p-[16px] md:p-[24px] flex flex-col gap-[24px]">
+
+        {/* ACTION PLAN LIST */}
+        <motion.div
+          className="flex flex-col gap-[16px]"
+          initial="hidden"
+          animate="visible"
+          variants={{
+            hidden: { opacity: 0 },
+            visible: {
+              opacity: 1,
+              transition: { staggerChildren: 0.08 }
+            }
+          }}
+        >
+          {planSteps.map((step, idx) => (
+            <motion.div
+              key={idx}
+              variants={{
+                hidden: { opacity: 0, x: -10 },
+                visible: { opacity: 1, x: 0 }
+              }}
+              className="flex items-start gap-[12px]"
+            >
+              <div className="w-[24px] h-[24px] shrink-0 rounded-full bg-bg-surface border border-border flex items-center justify-center font-mono text-[12px] text-text-secondary mt-[2px]">
+                {idx + 1}
+              </div>
+              <p className="text-[15px] text-text-primary leading-[1.6] pt-[2px]">
+                {step}
+              </p>
+            </motion.div>
+          ))}
+          {planSteps.length === 0 && (
+            <p className="text-[15px] text-text-muted italic">No specific actions generated.</p>
+          )}
+        </motion.div>
+
+        {/* TOOLS USED */}
+        <div className="border-t border-border pt-[20px] flex flex-col gap-[12px]">
+          <div className="flex items-center gap-[8px] text-[13px] font-semibold text-text-muted uppercase tracking-[0.08em]">
+            <Cpu size={14} />
+            <span>Tools used by Gemma 4</span>
+          </div>
+          <div className="flex flex-wrap gap-[8px]">
+            {toolsUsed && toolsUsed.length > 0 ? (
+              toolsUsed.map((tool) => (
+                <div
+                  key={tool}
+                  className="group relative bg-bg-surface border border-border border-l-[3px] border-l-accent px-[10px] py-[4px] rounded-[6px] font-mono text-[12px] text-text-secondary hover:text-text-primary transition-colors cursor-help"
+                >
+                  {tool}
+                  {/* Tooltip */}
+                  <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 w-[220px] p-[10px] bg-bg-tertiary border border-border rounded-[8px] text-[12px] font-sans text-text-primary opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 shadow-lg pointer-events-none">
+                    {TOOL_DESCRIPTIONS[tool] || "Internal agent function."}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <span className="text-[13px] text-text-muted">No external tools invoked.</span>
             )}
           </div>
-        ) : (
-          <p className="text-sm text-gray-600 italic">No action plan generated yet.</p>
-        )}
-      </div>
-
-      {/* PDF Export Preview */}
-      <div className="rounded-xl border border-white/[0.07] bg-white/[0.015] p-3 flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs text-gray-300 font-medium">Operational Referral Packet</p>
-          <p className="text-[11px] text-gray-600 mt-0.5 leading-snug">Print-ready export with SOP citations and response chain.</p>
         </div>
-        {/* QR placeholder */}
-        <div className="w-11 h-11 rounded-lg grid grid-cols-3 gap-[2px] p-1.5 bg-white/90 flex-shrink-0" aria-hidden="true">
-          {Array.from({ length: 9 }).map((_, i) => (
-            <span key={i} className={[0, 2, 4, 6, 8].includes(i) ? "bg-gray-900 rounded-[1px]" : "bg-transparent"} />
-          ))}
-        </div>
-      </div>
 
-      {/* Resources */}
-      {resourceList.length > 0 && (
-        <div>
-          <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">Resources Found</p>
-          <div className="space-y-2">
-            {resourceList.slice(0, 3).map((r, i) => (
-              <div key={i} className="bg-white/[0.02] border border-white/[0.05] rounded-xl p-3">
-                <p className="text-xs font-medium text-gray-200">{String(r.name ?? "Resource")}</p>
-                {r.address != null && (
-                  <p className="text-[11px] text-gray-500 mt-0.5">{String(r.address)}</p>
-                )}
-                {r.phone != null && (
-                  <p className="text-[11px] text-blue-400 mt-1 font-mono">{String(r.phone)}</p>
-                )}
-              </div>
-            ))}
+        {/* EXPORT SECTION */}
+        <div className="border-t border-border pt-[20px] flex flex-col sm:flex-row sm:items-center justify-between gap-[16px]">
+          <div className="flex items-center gap-[12px]">
+            <span className="text-[12px] font-semibold text-text-muted uppercase tracking-[0.08em]">Case ID</span>
+            <span className="font-mono text-[20px] text-text-primary">{caseId}</span>
+            <span className="bg-triage-green-bg text-triage-green border border-triage-green-border px-[8px] py-[2px] rounded-[6px] text-[12px] font-medium flex items-center gap-[4px]">
+              SAVED <Check size={12} />
+            </span>
           </div>
+          <button
+            onClick={handleExport}
+            disabled={isExporting}
+            className={cn(
+              "h-[48px] px-[24px] rounded-[12px] font-medium text-[14px] flex items-center justify-center gap-[8px] transition-all duration-300",
+              isExporting
+                ? "bg-bg-tertiary text-text-secondary border border-border cursor-wait"
+                : exportSuccess
+                  ? "bg-bg-surface border border-triage-green text-text-primary"
+                  : "bg-bg-surface border border-border hover:border-border-hover text-text-primary hover:bg-bg-tertiary"
+            )}
+          >
+            {isExporting ? (
+              <div className="w-5 h-5 border-2 border-text-muted border-t-text-primary rounded-full animate-spin" />
+            ) : exportSuccess ? (
+              <>
+                Exported Successfully <Check size={16} className="text-triage-green" />
+              </>
+            ) : (
+              <>
+                <FileDown size={18} /> Export Referral PDF →
+              </>
+            )}
+          </button>
         </div>
-      )}
+
+      </div>
     </div>
   );
 }
