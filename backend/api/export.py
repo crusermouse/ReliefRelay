@@ -62,7 +62,7 @@ async def export_cases_csv(limit: int = 100):
     
     writer.writeheader()
     for case in cases:
-        intake_data = json.loads(case["intake_data"]) if isinstance(case["intake_data"], str) else case["intake_data"]
+        intake_data = case["intake_data"]
         row = {
             "case_id": case["case_id"],
             "triage_level": case["triage_level"],
@@ -119,7 +119,7 @@ async def export_cases_bulk(limit: int = 50):
         )
         writer.writeheader()
         for case in cases:
-            intake_data = json.loads(case["intake_data"]) if isinstance(case["intake_data"], str) else case["intake_data"]
+            intake_data = case["intake_data"]
             writer.writerow({
                 "case_id": case["case_id"],
                 "triage_level": case["triage_level"],
@@ -142,7 +142,7 @@ async def export_cases_bulk(limit: int = 50):
                     "case_id": case["case_id"],
                     "triage_level": case["triage_level"],
                     "created_at": case["created_at"],
-                    "intake_data": json.loads(case["intake_data"]) if isinstance(case["intake_data"], str) else case["intake_data"],
+                    "intake_data": case["intake_data"],
                     "action_plan": case.get("action_plan", ""),
                 }
                 for case in cases
