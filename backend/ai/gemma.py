@@ -10,9 +10,9 @@ ACTIVE_PROVIDER = _PROVIDER
 HARDWARE_REPORT = _REPORT
 
 if _PROVIDER == "google":
-    import google.generativeai as genai
+    from google import genai
     import json
-    genai.configure(api_key=os.environ.get("GOOGLE_API_KEY", ""))
+
 
 
 import traceback
@@ -148,10 +148,10 @@ async def chat_text(
 
     if ACTIVE_PROVIDER == "google":
         model_name = os.environ.get("GEMMA_MODEL_CLOUD", "gemma-3-27b-it")
-        model = genai.GenerativeModel(model_name)
+        client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY", ""))
         if system:
             prompt = f"System: {system}\nUser: {prompt}"
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(model=model_name, contents=prompt)
         return response.text
 
     messages = []
@@ -187,11 +187,11 @@ async def chat_vision(
     if ACTIVE_PROVIDER == "google":
         import PIL.Image
         model_name = os.environ.get("GEMMA_MODEL_CLOUD", "gemma-3-27b-it")
-        model = genai.GenerativeModel(model_name)
+        client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY", ""))
         img = PIL.Image.open(image_path)
         if system:
             prompt = f"System: {system}\nUser: {prompt}"
-        response = model.generate_content([prompt, img])
+        response = client.models.generate_content(model=model_name, contents=[img, prompt])
         return response.text
 
     img_b64 = encode_image(image_path)
