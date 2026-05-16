@@ -1,4 +1,5 @@
 import re
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,42 +23,28 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 ALLOWED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
+app = FastAPI(title="ReliefRelay API", version="1.0.0")
+
+
+@app.on_event("startup")
+async def startup():
     global vector_store
-    service_status = {"backend": "ready"}
-    try:
-        vector_store = load_index()
-        service_status["vector_store"] = "ready"
-    except Exception as exc:
-        vector_store = None
-        service_status["vector_store"] = f"degraded: {exc}"
+    vector_store = load_index()
 
-    ollama_ready, ollama_message = probe_ollama()
-    model_ready, model_message = probe_gemma_model() if ollama_ready else (False, ollama_message)
-    # Optionally perform a lightweight warmup for demo readiness
-    if ollama_ready and model_ready and settings.GEMMA_WARMUP:
-        try:
-            import asyncio
-            from ai.gemma import warm_model
-
-            warmed, warm_msg = await warm_model()
-            if warmed:
-                service_status["ollama"] = "ready"
-            else:
-                service_status["ollama"] = f"warming_failed: {warm_msg}"
-        except Exception as exc:
-            service_status["ollama"] = f"warming_error: {exc}"
+    provider = settings.GEMMA_PROVIDER
+    if provider == "google":
+        key = settings.GOOGLE_API_KEY
+        if not key or key == "your_key_here":
+            raise RuntimeError(
+                "GOOGLE_API_KEY is not set. "
+                "Get a free key at https://aistudio.google.com/app/apikey "
+                "and add it to backend/.env"
+            )
+        print(f"[SUCCESS] Inference provider: Google AI Studio ({settings.GEMMA_MODEL_CLOUD})", flush=True)
     else:
-        service_status["ollama"] = "ready" if model_ready else f"degraded: {model_message}"
+        print(f"[SUCCESS] Inference provider: Ollama local ({settings.GEMMA_MODEL})", flush=True)
 
-    service_status["mode"] = "operational" if model_ready and vector_store is not None else "degraded"
-    app.state.service_status = service_status
-    print(f"[SUCCESS] ReliefRelay API ready ({service_status['mode']})")
-    yield
-
-
-app = FastAPI(title="ReliefRelay API", version="1.0.0", lifespan=lifespan)
+    print("[SUCCESS] ReliefRelay API ready", flush=True)
 app.include_router(export_router)
 
 app.add_middleware(
@@ -132,7 +119,7 @@ async def process_intake(
     elif voice_text and intake_record:
         # Merge voice data into image-extracted data to fill gaps
         try:
-            voice_data = extract_from_voice(voice_text)
+            voice_data = await extract_from_voice(voice_text)
             for field, val in voice_data.dict().items():
                 if val and not getattr(intake_record, field):
                     setattr(intake_record, field, val)

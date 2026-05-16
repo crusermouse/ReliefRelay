@@ -1,6 +1,7 @@
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
-ollama>=0.2.0
+# ollama  # local inference fallback — requires 10GB+ RAM
+google-genai
 langchain-community==0.4.1
 langchain-ollama==1.1.0
 langchain-text-splitters==1.1.2

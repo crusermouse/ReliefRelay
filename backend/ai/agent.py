@@ -190,17 +190,12 @@ Process this case now."""
     messages = [{"role": "user", "content": user_message}]
     tool_calls_raw: list[dict[str, Any]] = []
     assistant_message: dict[str, Any] = {"role": "assistant", "content": ""}
-    model_available = True
 
-    try:
-        temp = 0.0 if settings.GEMMA_DETERMINISTIC else 1.0
-        assistant_message = await chat_with_tools(messages=[{"role": "system", "content": system}] + messages, tools=TOOLS, system=system)
-        tool_calls_raw = assistant_message.get("tool_calls") or []
-        if not isinstance(tool_calls_raw, list):
-            tool_calls_raw = []
-        messages.append(assistant_message)
-    except Exception:
-        model_available = False
+    assistant_message = await chat_with_tools(messages=[{"role": "system", "content": system}] + messages, tools=TOOLS, system=system)
+    tool_calls_raw = assistant_message.get("tool_calls") or []
+    if not isinstance(tool_calls_raw, list):
+        tool_calls_raw = []
+    messages.append(assistant_message)
 
     tool_results: dict[str, list[dict[str, Any]]] = {}
     tool_calls_made: list[str] = []
@@ -251,16 +246,12 @@ Process this case now."""
         {"stage": "tool-calling", "status": "complete" if tool_calls_raw else "degraded"},
     ]
 
-    try:
-        temp = 0.0 if settings.GEMMA_DETERMINISTIC else 1.0
-        final_message = await chat_text(prompt=f"Generate an action plan:\n\n{json.dumps(intake_record, ensure_ascii=False)}\n\nContext:\n{rag_context}", system=system, temperature=temp)
-        action_plan = str(final_message).strip()
-        if not action_plan:
-            raise ValueError("Empty action plan returned by model")
-        workflow_events.append({"stage": "packet-generation", "status": "complete"})
-    except Exception:
-        action_plan = _build_fallback_action_plan(intake_record, rag_context, tool_results, triage_level)
-        workflow_events.append({"stage": "packet-generation", "status": "fallback"})
+    temp = 0.0 if settings.GEMMA_DETERMINISTIC else 1.0
+    final_message = await chat_text(prompt=f"Generate an action plan:\n\n{json.dumps(intake_record, ensure_ascii=False)}\n\nContext:\n{rag_context}", system=system, temperature=temp)
+    action_plan = str(final_message).strip()
+    if not action_plan:
+        raise ValueError("Empty action plan returned by model")
+    workflow_events.append({"stage": "packet-generation", "status": "complete"})
 
     try:
         update_case_db(case_id, action_plan)
@@ -274,6 +265,6 @@ Process this case now."""
         "resources_found": tool_results,
         "tool_calls_made": tool_calls_made,
         "workflow_events": workflow_events,
-        "operational_mode": "full" if model_available else "degraded",
+        "operational_mode": "full",
         "triage_level": triage_level,
     }

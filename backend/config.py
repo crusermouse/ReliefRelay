@@ -1,3 +1,4 @@
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -5,6 +6,9 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     # Default demo-safe Gemma model; override with env var if you have a smaller/quantized SKU
     GEMMA_MODEL: str = "gemma4:gemma-4-mini"
+    GEMMA_PROVIDER: str = "google"
+    GOOGLE_API_KEY: str = ""
+    GEMMA_MODEL_CLOUD: str = "gemma-3-27b-it"
     EMBED_MODEL: str = "nomic-embed-text"
     CHROMA_PERSIST_DIR: str = "./data/chroma_db"
     DOCS_DIR: str = "./data/relief_docs"
@@ -23,7 +27,10 @@ class Settings(BaseSettings):
     GEMMA_WARMUP_PROMPT: str = "System check: are you ready?"
     GEMMA_DETERMINISTIC: bool = True
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=Path(__file__).parent / ".env",
+        extra="ignore"
+    )
 
 
 settings = Settings()
