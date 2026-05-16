@@ -42,22 +42,46 @@ def _fallback_intake_from_text(text: str) -> IntakeRecord:
         if keyword in lowered and label not in issues:
             issues.append(label)
 
-    if "chest pain" in lowered or "unconscious" in lowered or "not breathing" in lowered or "severe bleeding" in lowered or "difficulty breathing" in lowered:
+    if (
+        "chest pain" in lowered
+        or "unconscious" in lowered
+        or "not breathing" in lowered
+        or "severe bleeding" in lowered
+        or "difficulty breathing" in lowered
+    ):
         urgency = "critical"
-    elif "urgent" in lowered or "severe" in lowered or "needs doctor" in lowered or "needs medical" in lowered or "hospital" in lowered:
+    elif (
+        "urgent" in lowered
+        or "severe" in lowered
+        or "needs doctor" in lowered
+        or "needs medical" in lowered
+        or "hospital" in lowered
+    ):
         urgency = "high"
-    elif "shelter" in lowered or "food" in lowered or "water" in lowered or "needs help" in lowered or "support" in lowered:
+    elif (
+        "shelter" in lowered
+        or "food" in lowered
+        or "water" in lowered
+        or "needs help" in lowered
+        or "support" in lowered
+    ):
         urgency = "medium"
     else:
         urgency = "low" if issues else "none"
 
-    family_match = re.search(r"\b(\d{1,2})\s*(?:people|persons|family|famil(?:y|ies))\b", lowered)
+    family_match = re.search(
+        r"\b(\d{1,2})\s*(?:people|persons|family|famil(?:y|ies))\b", lowered
+    )
     family_members = int(family_match.group(1)) if family_match else 1
 
     return IntakeRecord(
         presenting_issues=issues,
         medical_urgency=urgency,  # type: ignore[arg-type]
-        shelter_needed="shelter" in lowered or "evacuate" in lowered or "evacuation" in lowered,
+        shelter_needed=(
+            "shelter" in lowered
+            or "evacuate" in lowered
+            or "evacuation" in lowered
+        ),
         food_needed="food" in lowered,
         water_needed="water" in lowered or "dehydration" in lowered,
         family_members=family_members,
@@ -127,8 +151,8 @@ async def extract_from_voice(transcription: str) -> IntakeRecord:
 {transcription}
 ---
 Extract the intake information and return a JSON object."""
+    raw = await chat_text(prompt, system=EXTRACTION_SYSTEM, json_mode=True)
     try:
-        raw = await chat_text(prompt, system=EXTRACTION_SYSTEM, json_mode=True)
         text = raw.strip().removeprefix("```json").removesuffix("```").strip()
         return IntakeRecord(**json.loads(text))
     except Exception:
@@ -143,8 +167,8 @@ async def extract_from_text(manual_text: str) -> IntakeRecord:
 {manual_text}
 ---
 Extract the intake information and return a JSON object."""
+    raw = await chat_text(prompt, system=EXTRACTION_SYSTEM, json_mode=True)
     try:
-        raw = await chat_text(prompt, system=EXTRACTION_SYSTEM, json_mode=True)
         text = raw.strip().removeprefix("```json").removesuffix("```").strip()
         return IntakeRecord(**json.loads(text))
     except Exception:
