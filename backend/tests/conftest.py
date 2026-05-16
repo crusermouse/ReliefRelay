@@ -4,7 +4,12 @@ from unittest.mock import MagicMock
 # Mock required dependencies before any backend imports
 for module in ["pydantic_settings", "fastapi", "ollama", "chromadb"]:
     if module not in sys.modules:
-        sys.modules[module] = MagicMock()
+
+        if module == "pydantic_settings":
+            pass # DO NOT MOCK
+        else:
+            sys.modules[module] = MagicMock()
+
 
 import pytest
 import sqlite3
