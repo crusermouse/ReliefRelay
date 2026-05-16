@@ -30,6 +30,7 @@ export default function AppShell() {
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
   const [currentResponse, setCurrentResponse] = useState<IntakeResponse | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [inferenceStatus, setInferenceStatus] = useState<any>(null);
 
   // Mobile UI state
   const [activeTab, setActiveTab] = useState<"intake" | "cases" | "export">("intake");
@@ -47,6 +48,13 @@ export default function AppShell() {
   useEffect(() => {
     loadCases();
   }, [loadCases]);
+
+  useEffect(() => {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/inference-status`)
+      .then(r => r.json())
+      .then(data => setInferenceStatus(data))
+      .catch(() => {})
+  }, []);
 
   const handleSelectCase = async (id: string) => {
     setActiveCaseId(id);
@@ -113,8 +121,13 @@ export default function AppShell() {
             </span>
           )}
           <div className="flex items-center gap-[8px] bg-bg-surface border border-border px-[12px] py-[4px] rounded-[12px]">
-            <div className="w-[8px] h-[8px] rounded-full bg-triage-green animate-[status-blink_2.8s_ease-in-out_infinite]" />
-            <span className="text-[12px] font-medium text-text-secondary">Offline Ready</span>
+            <div className={cn(
+              "w-[8px] h-[8px] rounded-full",
+              !inferenceStatus ? "bg-gray-400" : (inferenceStatus.provider === "google" ? "bg-blue-400" : "bg-triage-green")
+            )} />
+            <span className="text-[12px] font-medium text-text-secondary">
+              {!inferenceStatus ? "Connecting…" : (inferenceStatus.provider === "google" ? "Gemma · Cloud" : "Gemma · Local")}
+            </span>
           </div>
         </div>
       </header>

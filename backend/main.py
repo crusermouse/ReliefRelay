@@ -1,3 +1,8 @@
+import os
+from dotenv import load_dotenv
+from pathlib import Path
+load_dotenv(Path(__file__).parent / ".env")
+from ai.gemma import ACTIVE_PROVIDER, HARDWARE_REPORT
 import re
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
@@ -22,42 +27,31 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 ALLOWED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
+app = FastAPI(title="ReliefRelay API", version="1.0.0")
+
+@app.on_event("startup")
+async def startup():
     global vector_store
-    service_status = {"backend": "ready"}
-    try:
-        vector_store = load_index()
-        service_status["vector_store"] = "ready"
-    except Exception as exc:
-        vector_store = None
-        service_status["vector_store"] = f"degraded: {exc}"
-
-    ollama_ready, ollama_message = probe_ollama()
-    model_ready, model_message = probe_gemma_model() if ollama_ready else (False, ollama_message)
-    # Optionally perform a lightweight warmup for demo readiness
-    if ollama_ready and model_ready and settings.GEMMA_WARMUP:
-        try:
-            import asyncio
-            from ai.gemma import warm_model
-
-            warmed, warm_msg = await warm_model()
-            if warmed:
-                service_status["ollama"] = "ready"
-            else:
-                service_status["ollama"] = f"warming_failed: {warm_msg}"
-        except Exception as exc:
-            service_status["ollama"] = f"warming_error: {exc}"
+    vector_store = load_index()
+    reason = HARDWARE_REPORT.get("reason", "")
+    ram = HARDWARE_REPORT.get("ram_available_gb", "unknown")
+    if ACTIVE_PROVIDER == "google":
+        key = os.environ.get("GOOGLE_API_KEY", "")
+        if not key or key == "your_key_here":
+            raise RuntimeError(
+                "Local inference unavailable and GOOGLE_API_KEY is not set. "
+                f"Reason: {reason}. "
+                "Get a free key at https://aistudio.google.com/app/apikey"
+            )
+        model = os.environ.get("GEMMA_MODEL_CLOUD", "gemma-3-27b-it")
+        print(f"Inference: Google AI Studio ({model})")
+        print(f"Reason: {reason}")
     else:
-        service_status["ollama"] = "ready" if model_ready else f"degraded: {model_message}"
+        model = os.environ.get("GEMMA_MODEL", "gemma4:latest")
+        print(f"Inference: Local Ollama ({model})")
+        print(f"RAM available: {ram}GB")
+    print("ReliefRelay API ready")
 
-    service_status["mode"] = "operational" if model_ready and vector_store is not None else "degraded"
-    app.state.service_status = service_status
-    print(f"[SUCCESS] ReliefRelay API ready ({service_status['mode']})")
-    yield
-
-
-app = FastAPI(title="ReliefRelay API", version="1.0.0", lifespan=lifespan)
 app.include_router(export_router)
 
 app.add_middleware(
@@ -67,6 +61,18 @@ app.add_middleware(
     allow_headers=["Content-Type", "Accept", "Origin", "X-Requested-With"],
     allow_credentials=True,
 )
+@app.get("/inference-status")
+async def inference_status():
+    return {
+        "provider": ACTIVE_PROVIDER,
+        "model": (
+            os.environ.get("GEMMA_MODEL_CLOUD", "gemma-3-27b-it")
+            if ACTIVE_PROVIDER == "google"
+            else os.environ.get("GEMMA_MODEL", "gemma4:latest")
+        ),
+        "hardware_report": HARDWARE_REPORT,
+    }
+
 
 
 def _validate_image_upload(image: UploadFile) -> None:

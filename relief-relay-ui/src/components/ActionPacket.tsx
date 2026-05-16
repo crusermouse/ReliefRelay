@@ -1,179 +1,142 @@
-import { useState } from "react";
-import { motion } from "framer-motion";
-import { Cpu, FileDown, Check, Copy } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { getPdfUrl } from "@/lib/api";
-import { toast } from "react-hot-toast";
+"use client"
 
-interface ActionPacketProps {
-  actionPlan: string;
-  caseId: string;
-  toolsUsed: string[];
+import { useState } from "react"
+import { motion, AnimatePresence } from "framer-motion"
+import { Copy, FileDown, Check, ClipboardList } from "lucide-react"
+import { ActionStep } from "@/components/ActionStep"
+import { ToolCallBadge } from "@/components/ToolCallBadge"
+import { parseActionPlan } from "@/lib/parseActionPlan"
+import { getPdfUrl } from "@/lib/api"
+import { cn } from "@/lib/utils"
+
+interface Props {
+  actionPlan: string
+  caseId: string | null
+  toolsUsed: string[]
 }
 
-const TOOL_DESCRIPTIONS: Record<string, string> = {
-  search_local_resources: "Searches local offline databases for beds, supplies, and staff.",
-  create_case: "Registers a new case ID in the local triage system.",
-  score_triage: "Calculates medical urgency based on standard protocols.",
-  generate_referral_pdf: "Compiles intake and action plan into a printable referral document."
-};
+export function ActionPacket({ actionPlan, caseId, toolsUsed }: Props) {
+  const [copied, setCopied] = useState(false)
+  const [pdfLoading, setPdfLoading] = useState(false)
 
-export function ActionPacket({ actionPlan, caseId, toolsUsed }: ActionPacketProps) {
-  const [isExporting, setIsExporting] = useState(false);
-  const [exportSuccess, setExportSuccess] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const steps = parseActionPlan(actionPlan)
 
-  // Parse action plan by newlines, filtering out empty lines
-  const planSteps = actionPlan
-    .split('\n')
-    .map(line => line.replace(/^\d+[\.\)]\s*/, '').trim()) // remove leading numbers if they exist
-    .filter(line => line.length > 0);
+  const handleCopy = async () => {
+    // Copy plain-text version (strip any remaining markdown)
+    const plain = steps.map((s, i) =>
+      `${i + 1}. ${s.title ? s.title + ": " : ""}${s.body}`
+    ).join("\n")
+    await navigator.clipboard.writeText(plain)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
-  const handleExport = async () => {
-    setIsExporting(true);
-    try {
-      // Simulate slight delay for feedback
-      await new Promise(r => setTimeout(r, 600));
-      window.open(getPdfUrl(caseId), "_blank");
-      setExportSuccess(true);
-      setTimeout(() => setExportSuccess(false), 2000);
-    } catch (e) {
-      toast.error("Failed to open PDF export");
-    } finally {
-      setIsExporting(false);
-    }
-  };
+  const handleExport = () => {
+    if (!caseId) return
+    setPdfLoading(true)
+    const url = getPdfUrl(caseId)
+    window.open(url, "_blank")
+    setTimeout(() => setPdfLoading(false), 2000)
+  }
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(actionPlan);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-    toast.success("Action plan copied");
-  };
+  if (!actionPlan && steps.length === 0) return null
 
   return (
-    <div className="bg-bg-secondary border border-border rounded-[16px] overflow-hidden">
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      className="rounded-2xl border border-white/8 bg-[#111318] overflow-hidden"
+    >
+      {/* ── HEADER ── */}
+      <div className="flex items-center gap-3 px-5 py-3.5 border-b border-white/6">
+        <ClipboardList size={15} className="text-white/40" />
+        <span className="text-[11px] font-semibold uppercase tracking-widest text-white/40">
+          Action Plan
+        </span>
 
-      {/* HEADER */}
-      <div className="flex items-center justify-between px-[16px] py-[12px] border-b border-border bg-bg-surface">
-        <h2 className="text-[13px] font-semibold text-text-muted uppercase tracking-[0.08em]">Action Plan</h2>
-        <div className="flex items-center gap-[8px]">
-          <button
+        <div className="ml-auto flex items-center gap-2">
+          {/* Copy button */}
+          <motion.button
+            whileTap={{ scale: 0.92 }}
             onClick={handleCopy}
-            className="flex items-center gap-[6px] text-[12px] font-medium text-text-secondary hover:text-text-primary px-[8px] py-[4px] rounded-[6px] hover:bg-bg-tertiary transition-colors"
-          >
-            {copied ? <Check size={14} className="text-triage-green" /> : <Copy size={14} />}
-            <span>Copy</span>
-          </button>
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-[6px] text-[12px] font-medium text-text-secondary hover:text-text-primary px-[8px] py-[4px] rounded-[6px] hover:bg-bg-tertiary transition-colors"
-          >
-            <FileDown size={14} />
-            <span className="hidden sm:inline-block">Export PDF ↓</span>
-          </button>
-        </div>
-      </div>
-
-      <div className="p-[16px] md:p-[24px] flex flex-col gap-[24px]">
-
-        {/* ACTION PLAN LIST */}
-        <motion.div
-          className="flex flex-col gap-[16px]"
-          initial="hidden"
-          animate="visible"
-          variants={{
-            hidden: { opacity: 0 },
-            visible: {
-              opacity: 1,
-              transition: { staggerChildren: 0.08 }
-            }
-          }}
-        >
-          {planSteps.map((step, idx) => (
-            <motion.div
-              key={idx}
-              variants={{
-                hidden: { opacity: 0, x: -10 },
-                visible: { opacity: 1, x: 0 }
-              }}
-              className="flex items-start gap-[12px]"
-            >
-              <div className="w-[24px] h-[24px] shrink-0 rounded-full bg-bg-surface border border-border flex items-center justify-center font-mono text-[12px] text-text-secondary mt-[2px]">
-                {idx + 1}
-              </div>
-              <p className="text-[15px] text-text-primary leading-[1.6] pt-[2px]">
-                {step}
-              </p>
-            </motion.div>
-          ))}
-          {planSteps.length === 0 && (
-            <p className="text-[15px] text-text-muted italic">No specific actions generated.</p>
-          )}
-        </motion.div>
-
-        {/* TOOLS USED */}
-        <div className="border-t border-border pt-[20px] flex flex-col gap-[12px]">
-          <div className="flex items-center gap-[8px] text-[13px] font-semibold text-text-muted uppercase tracking-[0.08em]">
-            <Cpu size={14} />
-            <span>Tools used by Gemma 4</span>
-          </div>
-          <div className="flex flex-wrap gap-[8px]">
-            {toolsUsed && toolsUsed.length > 0 ? (
-              toolsUsed.map((tool) => (
-                <div
-                  key={tool}
-                  className="group relative bg-bg-surface border border-border border-l-[3px] border-l-accent px-[10px] py-[4px] rounded-[6px] font-mono text-[12px] text-text-secondary hover:text-text-primary transition-colors cursor-help"
-                >
-                  {tool}
-                  {/* Tooltip */}
-                  <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 w-[220px] p-[10px] bg-bg-tertiary border border-border rounded-[8px] text-[12px] font-sans text-text-primary opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 shadow-lg pointer-events-none">
-                    {TOOL_DESCRIPTIONS[tool] || "Internal agent function."}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <span className="text-[13px] text-text-muted">No external tools invoked.</span>
-            )}
-          </div>
-        </div>
-
-        {/* EXPORT SECTION */}
-        <div className="border-t border-border pt-[20px] flex flex-col sm:flex-row sm:items-center justify-between gap-[16px]">
-          <div className="flex items-center gap-[12px]">
-            <span className="text-[12px] font-semibold text-text-muted uppercase tracking-[0.08em]">Case ID</span>
-            <span className="font-mono text-[20px] text-text-primary">{caseId}</span>
-            <span className="bg-triage-green-bg text-triage-green border border-triage-green-border px-[8px] py-[2px] rounded-[6px] text-[12px] font-medium flex items-center gap-[4px]">
-              SAVED <Check size={12} />
-            </span>
-          </div>
-          <button
-            onClick={handleExport}
-            disabled={isExporting}
             className={cn(
-              "h-[48px] px-[24px] rounded-[12px] font-medium text-[14px] flex items-center justify-center gap-[8px] transition-all duration-300",
-              isExporting
-                ? "bg-bg-tertiary text-text-secondary border border-border cursor-wait"
-                : exportSuccess
-                  ? "bg-bg-surface border border-triage-green text-text-primary"
-                  : "bg-bg-surface border border-border hover:border-border-hover text-text-primary hover:bg-bg-tertiary"
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium",
+              "border transition-all duration-200",
+              copied
+                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                : "border-white/10 bg-white/5 text-white/50 hover:text-white/80 hover:bg-white/8",
             )}
           >
-            {isExporting ? (
-              <div className="w-5 h-5 border-2 border-text-muted border-t-text-primary rounded-full animate-spin" />
-            ) : exportSuccess ? (
-              <>
-                Exported Successfully <Check size={16} className="text-triage-green" />
-              </>
-            ) : (
-              <>
-                <FileDown size={18} /> Export Referral PDF →
-              </>
-            )}
-          </button>
-        </div>
+            <AnimatePresence mode="wait">
+              {copied ? (
+                <motion.span
+                  key="check"
+                  initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
+                  className="flex items-center gap-1"
+                >
+                  <Check size={11} /> Copied
+                </motion.span>
+              ) : (
+                <motion.span
+                  key="copy"
+                  initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
+                  className="flex items-center gap-1"
+                >
+                  <Copy size={11} /> Copy
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </motion.button>
 
+          {/* Export PDF button */}
+          {caseId && (
+            <motion.button
+              whileTap={{ scale: 0.92 }}
+              onClick={handleExport}
+              disabled={pdfLoading}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium",
+                "border border-white/10 bg-white/5 text-white/50",
+                "hover:text-white/80 hover:bg-white/8",
+                "transition-all duration-200 disabled:opacity-40",
+              )}
+            >
+              <FileDown size={11} />
+              {pdfLoading ? "Opening…" : "Export PDF"}
+            </motion.button>
+          )}
+        </div>
       </div>
-    </div>
-  );
+
+      {/* ── TOOL CALLS ── */}
+      {toolsUsed?.length > 0 && (
+        <div className="px-4 pt-4">
+          <ToolCallBadge toolsUsed={toolsUsed} />
+        </div>
+      )}
+
+      {/* ── ACTION STEPS ── */}
+      <div className="p-4 space-y-2.5">
+        {steps.length === 0 ? (
+          <p className="text-sm text-white/30 text-center py-8">
+            No action steps generated yet.
+          </p>
+        ) : (
+          steps.map((step, i) => (
+            <ActionStep key={step.id} step={step} index={i} />
+          ))
+        )}
+      </div>
+
+      {/* ── CASE ID FOOTER ── */}
+      {caseId && (
+        <div className="px-5 py-3 border-t border-white/6 flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-[11px] text-white/30">Case saved</span>
+          <span className="text-[11px] font-mono text-white/50 ml-1">{caseId}</span>
+        </div>
+      )}
+    </motion.div>
+  )
 }
