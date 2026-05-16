@@ -129,8 +129,10 @@ async def extract_from_voice(transcription: str) -> IntakeRecord:
 Extract the intake information and return a JSON object."""
     try:
         raw = await chat_text(prompt, system=EXTRACTION_SYSTEM, json_mode=True)
-        return IntakeRecord(**json.loads(raw))
-    except (OllamaUnavailableError, Exception):
+        text = raw.strip().removeprefix("```json").removesuffix("```").strip()
+        return IntakeRecord(**json.loads(text))
+    except Exception:
+        # Fallback: keyword-based extraction rather than crashing
         return _fallback_intake_from_text(transcription)
 
 
@@ -143,6 +145,8 @@ async def extract_from_text(manual_text: str) -> IntakeRecord:
 Extract the intake information and return a JSON object."""
     try:
         raw = await chat_text(prompt, system=EXTRACTION_SYSTEM, json_mode=True)
-        return IntakeRecord(**json.loads(raw))
-    except (OllamaUnavailableError, Exception):
+        text = raw.strip().removeprefix("```json").removesuffix("```").strip()
+        return IntakeRecord(**json.loads(text))
+    except Exception:
+        # Fallback: keyword-based extraction rather than crashing
         return _fallback_intake_from_text(manual_text)

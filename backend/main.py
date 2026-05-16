@@ -1,23 +1,20 @@
 import os
-from dotenv import load_dotenv
-from pathlib import Path
-load_dotenv(Path(__file__).parent / ".env")
-from ai.gemma import ACTIVE_PROVIDER, HARDWARE_REPORT
 import re
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from pathlib import Path
+
+import aiofiles, uuid
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-import aiofiles, uuid
-from pathlib import Path
-from ai.extractor import extract_from_image, extract_from_voice, extract_from_text
-from ai.rag import load_index, retrieve
+
 from ai.agent import run_intake_agent
-from ai.gemma import probe_ollama, probe_gemma_model
-from tools.pdf_export import generate_pdf
-from tools.case_manager import list_cases, get_case
-from config import settings
+from ai.extractor import extract_from_image, extract_from_text, extract_from_voice
+from ai.gemma import ACTIVE_PROVIDER, HARDWARE_REPORT, probe_gemma_model, probe_ollama
+from ai.rag import load_index, retrieve
 from api.export import router as export_router
+from config import settings
+from tools.case_manager import get_case, list_cases
+from tools.pdf_export import generate_pdf
 
 # Load RAG index at startup (persisted — loads in seconds)
 vector_store = None
@@ -29,28 +26,31 @@ ALLOWED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 
 app = FastAPI(title="ReliefRelay API", version="1.0.0")
 
+
 @app.on_event("startup")
 async def startup():
     global vector_store
     vector_store = load_index()
+
     reason = HARDWARE_REPORT.get("reason", "")
     ram = HARDWARE_REPORT.get("ram_available_gb", "unknown")
     if ACTIVE_PROVIDER == "google":
-        key = os.environ.get("GOOGLE_API_KEY", "")
+        key = settings.GOOGLE_API_KEY or os.environ.get("GOOGLE_API_KEY", "")
         if not key or key == "your_key_here":
             raise RuntimeError(
                 "Local inference unavailable and GOOGLE_API_KEY is not set. "
                 f"Reason: {reason}. "
-                "Get a free key at https://aistudio.google.com/app/apikey"
+                "Get a free key at https://aistudio.google.com/app/apikey and add it to backend/.env"
             )
-        model = os.environ.get("GEMMA_MODEL_CLOUD", "gemma-3-27b-it")
-        print(f"Inference: Google AI Studio ({model})")
-        print(f"Reason: {reason}")
+        print(f"[SUCCESS] Inference provider: Google AI Studio ({settings.GEMMA_MODEL_CLOUD})", flush=True)
+        if reason:
+            print(f"[SUCCESS] Provider selection reason: {reason}", flush=True)
     else:
-        model = os.environ.get("GEMMA_MODEL", "gemma4:latest")
-        print(f"Inference: Local Ollama ({model})")
-        print(f"RAM available: {ram}GB")
-    print("ReliefRelay API ready")
+        print(f"[SUCCESS] Inference provider: Ollama local ({settings.GEMMA_MODEL})", flush=True)
+        print(f"[SUCCESS] RAM available: {ram}GB", flush=True)
+
+    print("[SUCCESS] ReliefRelay API ready", flush=True)
+
 
 app.include_router(export_router)
 
@@ -61,18 +61,15 @@ app.add_middleware(
     allow_headers=["Content-Type", "Accept", "Origin", "X-Requested-With"],
     allow_credentials=True,
 )
+
+
 @app.get("/inference-status")
 async def inference_status():
     return {
         "provider": ACTIVE_PROVIDER,
-        "model": (
-            os.environ.get("GEMMA_MODEL_CLOUD", "gemma-3-27b-it")
-            if ACTIVE_PROVIDER == "google"
-            else os.environ.get("GEMMA_MODEL", "gemma4:latest")
-        ),
+        "model": settings.GEMMA_MODEL_CLOUD if ACTIVE_PROVIDER == "google" else settings.GEMMA_MODEL,
         "hardware_report": HARDWARE_REPORT,
     }
-
 
 
 def _validate_image_upload(image: UploadFile) -> None:
@@ -138,7 +135,7 @@ async def process_intake(
     elif voice_text and intake_record:
         # Merge voice data into image-extracted data to fill gaps
         try:
-            voice_data = extract_from_voice(voice_text)
+            voice_data = await extract_from_voice(voice_text)
             for field, val in voice_data.dict().items():
                 if val and not getattr(intake_record, field):
                     setattr(intake_record, field, val)
